@@ -1,0 +1,11 @@
+SceneManager.cs: El cerebro absoluto. Recibe las órdenes, gestiona el Passthrough y crea la sala.
+
+TeleportManager.cs: Nuestro motor de viajes y fundidos a negro/transparente.
+
+PalmMenuActivator.cs: El gestor que detecta si el usuario levanta las manos y bloquea/desbloquea el menú.
+
+FanMenu.cs y FanOption.cs: El motor visual y la lógica de los botones flotantes del menú de las manos.
+
+FanMenuSelection.cs (y su .asset): La base de datos que usa el menú.
+
+PulsingCanvas.cs: Un detalle estético perfecto. Supongo que lo estás usando en el cartel de "Esperando Conexión" para que respire suavemente. Déjalo, le da un toque muy profesional.

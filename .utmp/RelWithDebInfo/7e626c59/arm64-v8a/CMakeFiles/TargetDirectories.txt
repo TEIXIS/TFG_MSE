@@ -1,0 +1,5 @@
+D:/Projectes _Unity/Sens_VR/4/Projecte_Proves/.utmp/RelWithDebInfo/7e626c59/arm64-v8a/CMakeFiles/edit_cache.dir
+D:/Projectes _Unity/Sens_VR/4/Projecte_Proves/.utmp/RelWithDebInfo/7e626c59/arm64-v8a/CMakeFiles/rebuild_cache.dir
+D:/Projectes _Unity/Sens_VR/4/Projecte_Proves/.utmp/RelWithDebInfo/7e626c59/arm64-v8a/GameActivity/CMakeFiles/game.dir
+D:/Projectes _Unity/Sens_VR/4/Projecte_Proves/.utmp/RelWithDebInfo/7e626c59/arm64-v8a/GameActivity/CMakeFiles/edit_cache.dir
+D:/Projectes _Unity/Sens_VR/4/Projecte_Proves/.utmp/RelWithDebInfo/7e626c59/arm64-v8a/GameActivity/CMakeFiles/rebuild_cache.dir

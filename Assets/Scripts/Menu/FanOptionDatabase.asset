@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 25d38f994f6f16f42b72b6f10920df40, type: 3}
+  m_Name: FanOptionDatabase
+  m_EditorClassIdentifier: Assembly-CSharp::FanOptionDatabase
+  allOptions:
+  - {fileID: 742123407080332816, guid: c0ad37da82f702c408cd638dfe4de2c7, type: 3}
+  - {fileID: 8582142985082885849, guid: 8872e110757e28141bef292c88d7dcf8, type: 3}
+  - {fileID: 2324012709577534063, guid: 996007098672bc04db16d1a51813d067, type: 3}
+  - {fileID: 7160873337781803020, guid: acb65a2dbaf39e9448a46f3a90ca4da6, type: 3}
+  - {fileID: 5005075742878982715, guid: 7a2fc4b722f58e44e8d0d86d86ba3ebd, type: 3}
+  - {fileID: 6590318131106238436, guid: 8645bb46eb4dec54f911ddeb594e6981, type: 3}
+  - {fileID: 5826619043083473719, guid: e8b2fc5cf80cf904a804e8f905bde008, type: 3}
+  - {fileID: 2237862850410704821, guid: 5b737cc95b9383848b4aa52913529822, type: 3}
+  - {fileID: 4927719944269020226, guid: 31ad78a3bc6fc9245bf84725e40a866a, type: 3}

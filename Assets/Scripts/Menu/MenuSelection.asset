@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4032a23917f2b2043ae90051c3a81b9f, type: 3}
+  m_Name: MenuSelection
+  m_EditorClassIdentifier: Assembly-CSharp::FanMenuSelection
+  selectedOptions:
+  - {fileID: 6975468647653969310, guid: c0ad37da82f702c408cd638dfe4de2c7, type: 3}
+  - {fileID: 2132664544813991255, guid: 8872e110757e28141bef292c88d7dcf8, type: 3}
+  - {fileID: 5386823808278608353, guid: 996007098672bc04db16d1a51813d067, type: 3}
+  - {fileID: 712082031923710850, guid: acb65a2dbaf39e9448a46f3a90ca4da6, type: 3}
+  - {fileID: 3455601593871069621, guid: 7a2fc4b722f58e44e8d0d86d86ba3ebd, type: 3}
+  - {fileID: 3599741583348194410, guid: 8645bb46eb4dec54f911ddeb594e6981, type: 3}
+  - {fileID: 4597590909876235000, guid: 057e9687eaf732842958475972911cd2, type: 3}
+  - {fileID: 5456394662324970535, guid: 17c722b22a1cbab448c98456239153fd, type: 3}
+  - {fileID: 3378717489550569420, guid: 31ad78a3bc6fc9245bf84725e40a866a, type: 3}

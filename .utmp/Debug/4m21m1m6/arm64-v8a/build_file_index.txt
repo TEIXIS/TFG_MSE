@@ -1,0 +1,2 @@
+D:\Projectes _Unity\Sens_VR\4\Projecte_Proves\Library\PramData\AndroidApplicationController\Cache\com.Hands_detection_office4\gradle-project\unityLibrary\src\main\cpp\CMakeLists.txt
+D:\Projectes _Unity\Sens_VR\4\Projecte_Proves\Library\PramData\AndroidApplicationController\Cache\com.Hands_detection_office4\gradle-project\unityLibrary\src\main\cpp\GameActivity\CMakeLists.txt

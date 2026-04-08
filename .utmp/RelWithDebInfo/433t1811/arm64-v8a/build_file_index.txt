@@ -1,0 +1,2 @@
+D:\Projectes _Unity\Sens_VR\9\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\src\main\cpp\CMakeLists.txt
+D:\Projectes _Unity\Sens_VR\9\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\src\main\cpp\GameActivity\CMakeLists.txt

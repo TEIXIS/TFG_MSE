@@ -1,0 +1,1 @@
+D:\Projectes_Unity\Sens_VR\Projecte_Proves - copia\Projecte_Proves\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\build\intermediates\cxx\Debug\5k6m1w1f\obj\arm64-v8a

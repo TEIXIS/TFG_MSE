@@ -1,0 +1,184 @@
+Afegir Building blocks: core->camera rig
+			core->hand tracking
+			interaction->interaction rigs
+
+A Window → Package Manager
+
+			Instalar-> XR Hands
+
+Activar Hand Tracking en OpenXR
+
+	Project Settings → XR Plug-in Management → OpenXR
+
+En Features:
+
+✔ Meta Quest Support
+✔ Hand Tracking
+✔ XR Hands
+		- He activat Hand Tracking Subsystem, Meta Hand Tracking Aim, Meta Quest Support
+
+
+
+
+
+
+
+
+
+
+
+
+
+se puede evitar que aparezcan los iconos de meta? y que para salir de la aplicación solo se haga con el mando. Pero que cuando se usen las manos, no salgan los accesos directos de meta
+
+Sí 👍 — pero aquí entramos en limitaciones del sistema de Meta Quest (OS) que es importante entender bien.
+
+✔️ Respuesta corta
+
+👉 No se pueden desactivar completamente los iconos/gestos del sistema Meta cuando usas hand tracking
+(es decir: menú palma, botón sistema, accesos rápidos).
+
+Esto es una restricción del sistema operativo de Quest.
+
+✔️ Por qué ocurre
+
+Cuando activas Hand Tracking en Quest, el sistema siempre reserva:
+
+gesto palma + pinza → menú sistema
+
+gesto palma sostenida → accesos rápidos
+
+gesture confidence global
+
+Estos gestos se procesan antes que Unity (a nivel OS).
+
+Por eso aparecen aunque tu app esté activa.
+
+✔️ Lo que SÍ puedes hacer
+
+Hay 3 estrategias reales usadas en apps profesionales Quest:
+
+✅ OPCIÓN 1 — Forzar salida solo con mandos
+
+Puedes permitir manos en tu app, pero exigir mandos para salir.
+
+En Unity + OpenXR:
+
+👉 desactiva acciones de sistema en manos
+👉 deja system button solo en controllers
+
+En Input Actions:
+
+System / Menu → solo controller
+
+Hand → sin binding de sistema
+
+Así el usuario no sale con manos.
+
+✅ OPCIÓN 2 — Reducir activación del menú Meta
+
+El menú Meta aparece cuando detecta:
+
+👉 palma abierta estable hacia cabeza
+👉 durante ~1 s
+
+Si tu app evita esa pose exacta → casi no aparece.
+
+Tu detector ya lo hace 👍
+pero el OS sigue activo si el usuario hace el gesto perfecto.
+
+✅ OPCIÓN 3 — Modo Kiosk (solo Enterprise)
+
+En dispositivos gestionados (MDM / Quest for Business):
+
+✔ se puede bloquear menú sistema
+✔ bloquear botón Meta
+✔ bloquear salida
+
+Pero solo en:
+
+Quest for Business
+
+dispositivos gestionados
+
+apps enterprise firmadas
+
+✔️ Lo que NO se puede hacer
+
+Meta no permite en apps normales:
+
+❌ desactivar menú sistema
+❌ interceptar gesto sistema
+❌ ocultar iconos OS
+❌ bloquear botón Meta
+
+Por seguridad del usuario.
+
+✔️ Mejores prácticas usadas en apps Quest
+
+Apps comerciales hacen:
+
+UI propia en mano distinta
+
+gestos distintos al sistema
+
+evitar palma frontal sostenida
+
+Ejemplos:
+
+Horizon
+
+Arkio
+
+ShapesXR
+
+Gravity Sketch
+
+✔️ Recomendación para tu caso
+
+Como usas gesto palmas 2 manos, ya estás seguro 👍
+
+El menú Meta usa:
+
+👉 1 palma + pinza
+
+Tu gesto:
+
+👉 2 palmas abiertas
+
+→ no hay conflicto UX real.
+
+✔️ Cómo hacer que el usuario no active Meta
+
+Consejo práctico:
+
+coloca UI en pecho o lateral
+
+no obligues palma frontal larga
+
+usa ambas manos (como haces)
+
+Así Meta casi nunca aparece.
+
+✔️ Conclusión clara
+
+👉 No se puede desactivar el menú Meta en apps normales
+👉 Sí puedes evitar conflictos con diseño gestual
+👉 Salida solo con mandos sí es posible
+👉 Bloqueo total solo en modo Enterprise
+
+Si quieres, puedo explicarte cómo configurar tu proyecto Unity para que solo el mando pueda abrir menú/salir y las manos nunca.		
+
+
+
+
+
+
+
+
+
+
+Puedes cambiar selección en runtime:
+
+menu.selection = otherSelection;
+menu.Build();

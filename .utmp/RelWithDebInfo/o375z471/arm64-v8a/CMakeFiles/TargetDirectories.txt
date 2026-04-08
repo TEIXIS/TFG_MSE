@@ -1,0 +1,5 @@
+C:/Sens_VR/20Mar/12/.utmp/RelWithDebInfo/o375z471/arm64-v8a/CMakeFiles/edit_cache.dir
+C:/Sens_VR/20Mar/12/.utmp/RelWithDebInfo/o375z471/arm64-v8a/CMakeFiles/rebuild_cache.dir
+C:/Sens_VR/20Mar/12/.utmp/RelWithDebInfo/o375z471/arm64-v8a/GameActivity/CMakeFiles/game.dir
+C:/Sens_VR/20Mar/12/.utmp/RelWithDebInfo/o375z471/arm64-v8a/GameActivity/CMakeFiles/edit_cache.dir
+C:/Sens_VR/20Mar/12/.utmp/RelWithDebInfo/o375z471/arm64-v8a/GameActivity/CMakeFiles/rebuild_cache.dir

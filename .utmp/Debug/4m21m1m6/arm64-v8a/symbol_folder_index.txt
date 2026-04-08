@@ -1,0 +1,1 @@
+D:\Projectes _Unity\Sens_VR\4\Projecte_Proves\Library\PramData\AndroidApplicationController\Cache\com.Hands_detection_office4\gradle-project\unityLibrary\build\intermediates\cxx\Debug\4m21m1m6\obj\arm64-v8a

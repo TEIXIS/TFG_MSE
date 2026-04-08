@@ -1,0 +1,1 @@
+D:\Projectes _Unity\Sens_VR\2\Projecte_Proves\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\build\intermediates\cxx\RelWithDebInfo\563l5d1c\obj\arm64-v8a

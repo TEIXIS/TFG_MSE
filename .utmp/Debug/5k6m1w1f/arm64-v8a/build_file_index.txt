@@ -1,0 +1,2 @@
+D:\Projectes_Unity\Sens_VR\Projecte_Proves - copia\Projecte_Proves\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\src\main\cpp\CMakeLists.txt
+D:\Projectes_Unity\Sens_VR\Projecte_Proves - copia\Projecte_Proves\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\src\main\cpp\GameActivity\CMakeLists.txt
