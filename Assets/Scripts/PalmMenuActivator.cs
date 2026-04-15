@@ -477,12 +477,24 @@ public class PalmMenuActivator : MonoBehaviour
             OpenMenu(opcionesDePartida);
         }
     }
-    public  void OpenMenu(List<GameObject> specificOptions = null)
+    public void OpenMenu(List<GameObject> specificOptions = null, bool forceMenuButtons = false)
     {
         if (!fanMenu || !head || !leftHand || !rightHand) return;
 
         fanMenu.PlaceInFrontOfUser(head, leftHand, rightHand, distancia, 0.05f);
         fanMenu.Build(specificOptions);
+
+        if (forceMenuButtons)
+        {
+            foreach (Transform option in fanMenu.transform)
+            {
+                var fanOption = option.GetComponent<FanOption>();
+                if (fanOption != null)
+                {
+                    fanOption.isTeleportButton = false;
+                }
+            }
+        }
 
         menuOpened = true;
         idleTimer = 0f;
@@ -499,6 +511,11 @@ public class PalmMenuActivator : MonoBehaviour
         bothTimer = 0f;
 
         fanMenu.CloseMenuAnimated(fadeDuration, null);
+    }
+
+    public void CloseMenuPublic(float fadeDuration = 0.5f)
+    {
+        CloseMenu(fadeDuration);
     }
 
     bool IsUserInteractingWithMenu()

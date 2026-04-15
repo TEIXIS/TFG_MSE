@@ -7,18 +7,18 @@ public class FanMenu : MonoBehaviour
     public FanMenuSelection selection;
 
     public GameObject optionPrefab;
-    [Range(1, 6)] public int optionCount = 4;
+    [Range(1, 7)] public int optionCount = 4;
 
     public float radius = 0.35f;
-    [Tooltip("Grados de separación entre cada opción (Recomendado: 25 para Hand Tracking).")]
+    [Tooltip("Grados de separaciï¿½n entre cada opciï¿½n (Recomendado: 25 para Hand Tracking).")]
     public float spacingAngle = 30f;
 
-    [Header("Animación Relajante")]
-    [Tooltip("Duración base de la animación para cada botón.")]
+    [Header("Animaciï¿½n Relajante")]
+    [Tooltip("Duraciï¿½n base de la animaciï¿½n para cada botï¿½n.")]
     public float appearDuration = 1.5f;
-    [Tooltip("Retraso entre la aparición de cada botón (Efecto cascada).")]
+    [Tooltip("Retraso entre la apariciï¿½n de cada botï¿½n (Efecto cascada).")]
     public float staggerDelay = 0.15f;
-  //  [Tooltip("Tiempo que tarda el menú en desvanecerse al cerrarlo o viajar.")]
+  //  [Tooltip("Tiempo que tarda el menï¿½ en desvanecerse al cerrarlo o viajar.")]
   //  public float disappearDuration = 1.2f;
 
     List<FanOption> options = new();
@@ -28,25 +28,26 @@ public class FanMenu : MonoBehaviour
     {
         // Si estaba desapareciendo, lo cortamos de golpe
         if (disappearCoroutine != null) StopCoroutine(disappearCoroutine);
+        StopAllCoroutines();
 
         Clear();
         List<GameObject> prefabsToUse = new();
 
         if (customOptions != null && customOptions.Count > 0)
         {
-            int count = Mathf.Clamp(customOptions.Count, 1, 6);
+            int count = Mathf.Clamp(customOptions.Count, 1, 7);
             for (int i = 0; i < count; i++) prefabsToUse.Add(customOptions[i]);
             optionCount = count;
         }
         else if (selection != null && selection.selectedOptions.Count > 0)
         {
-            int count = Mathf.Clamp(selection.selectedOptions.Count, 1, 6);
+            int count = Mathf.Clamp(selection.selectedOptions.Count, 1, 7);
             for (int i = 0; i < count; i++) prefabsToUse.Add(selection.selectedOptions[i]);
             optionCount = count;
         }
         else
         {
-            optionCount = Mathf.Clamp(optionCount, 1, 6);
+            optionCount = Mathf.Clamp(optionCount, 1, 7);
             for (int i = 0; i < optionCount; i++) prefabsToUse.Add(optionPrefab);
         }
 
@@ -74,10 +75,22 @@ public class FanMenu : MonoBehaviour
         StartCoroutine(AppearAnimation());
     }
 
+    public Transform GetOptionTransform(int index)
+{
+    if (index < 0 || index >= transform.childCount) return null;
+    return transform.GetChild(index);
+}
+
     void Clear()
     {
-        foreach (Transform c in transform) Destroy(c.gameObject);
         options.Clear();
+
+        while (transform.childCount > 0)
+        {
+            Transform child = transform.GetChild(0);
+            child.SetParent(null);   // lo sacamos del menÃº inmediatamente
+            Destroy(child.gameObject);
+        }
     }
 
     IEnumerator AppearAnimation()
@@ -99,7 +112,7 @@ public class FanMenu : MonoBehaviour
         }
     }
 
-    // --- NUEVA LÓGICA DE FADE OUT ---
+    // --- NUEVA Lï¿½GICA DE FADE OUT ---
     public void CloseMenuAnimated(float duration, System.Action onComplete)
     {
         if (!gameObject.activeInHierarchy)
@@ -157,12 +170,12 @@ public class FanMenu : MonoBehaviour
         forward.y = 0f;
         forward.Normalize();
 
-        // 1. Calculamos la posición base (X y Z) frente al usuario
+        // 1. Calculamos la posiciï¿½n base (X y Z) frente al usuario
         Vector3 targetPos = head.position + forward * distance;
 
-        // --- EL CAMBIO ERGONÓMICO ---
+        // --- EL CAMBIO ERGONï¿½MICO ---
         // 2. En lugar de usar la altura de las manos, usamos la altura de la cabeza (ojos).
-        // Restamos 0.35f (35 centímetros) para que quede a la altura cómoda del pecho.
+        // Restamos 0.35f (35 centï¿½metros) para que quede a la altura cï¿½moda del pecho.
         // Sumamos el verticalOffset por si desde el Inspector quieres ajustarlo un poco.
         targetPos.y = head.position.y - 0.35f + verticalOffset;
 

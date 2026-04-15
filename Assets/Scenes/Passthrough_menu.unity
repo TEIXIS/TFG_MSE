@@ -5723,12 +5723,20 @@ MonoBehaviour:
   - {fileID: 3131395570391417839, guid: d19057b2683af6446bb21b360bfc69c9, type: 3}
   - {fileID: 3131395570391417839, guid: d19057b2683af6446bb21b360bfc69c9, type: 3}
   - {fileID: 3131395570391417839, guid: d19057b2683af6446bb21b360bfc69c9, type: 3}
+  - {fileID: 3131395570391417839, guid: d19057b2683af6446bb21b360bfc69c9, type: 3}
+  - {fileID: 3131395570391417839, guid: d19057b2683af6446bb21b360bfc69c9, type: 3}
   nombresDeUsuarios:
   - Ana
   - Carles
   - Joan
   - David
   - Elena
+  - A1
+  - A2
+  - A3
+  - A4
+  - A5
+  - A6
   distanciaMenuUsuarios: 0.5
   separacionMenuUsuarios: 30
   canvasConexion: {fileID: 1792736737}

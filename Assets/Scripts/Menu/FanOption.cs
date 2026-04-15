@@ -4,32 +4,34 @@ using UnityEngine.Events;
 [RequireComponent(typeof(Collider))]
 public class FanOption : MonoBehaviour
 {
-    [Header("Tipo de Botón")]
-    [Tooltip("Márcalo para los viajes de la app. Desmárcalo para los botones del menú inicial.")]
+    [Header("Tipo de Botï¿½n")]
+    [Tooltip("Mï¿½rcalo para los viajes de la app. Desmï¿½rcalo para los botones del menï¿½ inicial.")]
     public bool isTeleportButton = true;
 
     // --- NUEVO: BILLBOARDING ---
     [Header("Billboarding (Mirar al Usuario)")]
-    [Tooltip("Si está marcado, el botón girará constantemente para mirar a la cara del usuario. Ideal para leer textos.")]
+    [Tooltip("Si estï¿½ marcado, el botï¿½n girarï¿½ constantemente para mirar a la cara del usuario. Ideal para leer textos.")]
     public bool lookAtUser = false;
-    [Tooltip("Si está marcado, el botón se mantendrá recto (sin inclinarse hacia arriba/abajo). Ideal para menús en cubos.")]
+    [Tooltip("Si estï¿½ marcado, el botï¿½n se mantendrï¿½ recto (sin inclinarse hacia arriba/abajo). Ideal para menï¿½s en cubos.")]
     public bool lockRotationToYAxis = true;
     private Transform mainCamera;
 
 
 
-    [Header("Lógica Personalizada")]
+    [Header("Lï¿½gica Personalizada")]
     public UnityEvent onCustomClick;
 
     public int optionIndex;
 
-    // MEGÁFONO 1: Para los viajes antiguos (Teleport, Fadeout)
+    // MEGï¿½FONO 1: Para los viajes antiguos (Teleport, Fadeout)
     public static event System.Action<int> OnOptionSelected;
 
-    // MEGÁFONO 2: NUEVO. Solo para el menú de inicio (Canvas, etc.)
+    // MEGï¿½FONO 2: NUEVO. Solo para el menï¿½ de inicio (Canvas, etc.)
     public static event System.Action<int> OnInitialMenuSelected;
 
-    // MEGÁFONO 3: Para cerrar el menú visual
+    public static event System.Action<int, string> OnInitialMenuSelectedWithLabel;
+
+    // MEGï¿½FONO 3: Para cerrar el menï¿½ visual
     public static event System.Action OnMenuInteractionConfirmed;
 
     Vector3 targetLocalPos;
@@ -60,7 +62,7 @@ public class FanOption : MonoBehaviour
 
 
     [Header("Accesibilidad - Movimiento Relax")]
-    [Tooltip("Distancia que el botón vuela hacia la mano. Ponlo a 0 para que no se mueva de su sitio (ideal para Quads).")]
+    [Tooltip("Distancia que el botï¿½n vuela hacia la mano. Ponlo a 0 para que no se mueva de su sitio (ideal para Quads).")]
     public float attractionDistance = 0.08f;
    
     [Header("Accesibilidad - Movimiento Relax")]
@@ -117,7 +119,7 @@ public class FanOption : MonoBehaviour
             baseEmissionColor = rend.sharedMaterial.GetColor(EmissionProp);
         }
 
-        // Buscamos la cámara principal del casco al nacer
+        // Buscamos la cï¿½mara principal del casco al nacer
         if (Camera.main != null) mainCamera = Camera.main.transform;
     }
 
@@ -173,8 +175,8 @@ public class FanOption : MonoBehaviour
         {
             Vector3 targetCameraPos = mainCamera.position;
 
-            // Si bloqueamos el eje Y, le mentimos a las matemáticas y le decimos que 
-            // la cámara está exactamente a la misma altura que el botón.
+            // Si bloqueamos el eje Y, le mentimos a las matemï¿½ticas y le decimos que 
+            // la cï¿½mara estï¿½ exactamente a la misma altura que el botï¿½n.
             if (lockRotationToYAxis)
             {
                 targetCameraPos.y = transform.position.y;
@@ -182,7 +184,7 @@ public class FanOption : MonoBehaviour
 
             Vector3 dirToCamera = transform.position - targetCameraPos;
 
-            // Seguro anti-errores por si la cámara está matemáticamente en el mismo píxel
+            // Seguro anti-errores por si la cï¿½mara estï¿½ matemï¿½ticamente en el mismo pï¿½xel
             if (dirToCamera.sqrMagnitude > 0.001f)
             {
                 Quaternion targetRotation = Quaternion.LookRotation(dirToCamera);
@@ -214,7 +216,7 @@ public class FanOption : MonoBehaviour
 
         float attractionLevel = Mathf.Clamp01(Mathf.Max(Mathf.Abs(hover), press));
 
-        // --- AQUÍ APLICAMOS TU VARIABLE ---
+        // --- AQUï¿½ APLICAMOS TU VARIABLE ---
         targetOffset = flatDirection * (attractionLevel * attractionDistance);
 
         Vector3 neighborRepulsion = Vector3.zero;
@@ -266,8 +268,10 @@ public class FanOption : MonoBehaviour
         }
 
         float currentInflationProgress = 0f;
-        if (maxGrowth > 1.01f) currentInflationProgress = Mathf.Clamp01((currentScaleMultiplier - 1f) / (maxGrowth - 1f));
-        else currentInflationProgress = 1f;
+        if (maxGrowth > 1.01f)
+            currentInflationProgress = Mathf.Clamp01((currentScaleMultiplier - 1f) / (maxGrowth - 1f));
+        else
+            currentInflationProgress = 1f;
 
         if (press >= 0.99f && currentInflationProgress >= requiredInflationToClick)
         {
@@ -283,18 +287,26 @@ public class FanOption : MonoBehaviour
                     audioSource.PlayOneShot(pressSound, 1.0f);
                 }
 
-                // --- LÓGICA DE RUTEO INTELIGENTE ---
+                TMPro.TMP_Text texto = GetComponentInChildren<TMPro.TMP_Text>();
+                string label = texto != null ? texto.text.Trim() : "";
+                bool esFlecha = (label == "<-" || label == "->");
+
                 if (isTeleportButton)
                 {
-                    OnOptionSelected?.Invoke(optionIndex); // Grita a los teletransportes
+                    OnOptionSelected?.Invoke(optionIndex);
                 }
                 else
                 {
-                    OnInitialMenuSelected?.Invoke(optionIndex); // Grita al SceneManager
+                    OnInitialMenuSelected?.Invoke(optionIndex);
+                    OnInitialMenuSelectedWithLabel?.Invoke(optionIndex, label);
                 }
 
                 onCustomClick?.Invoke();
-                OnMenuInteractionConfirmed?.Invoke();
+
+                if (!esFlecha)
+                {
+                    OnMenuInteractionConfirmed?.Invoke();
+                }
             }
         }
         else if (press < 0.1f)
@@ -348,15 +360,15 @@ using UnityEngine.Events;
 public class FanOption : MonoBehaviour
 {
 
-    [Header("Lógica Personalizada")]
-    [Tooltip("Añade aquí qué quieres que pase al hacer clic (Ej: Mostrar Canvas)")]
+    [Header("Lï¿½gica Personalizada")]
+    [Tooltip("Aï¿½ade aquï¿½ quï¿½ quieres que pase al hacer clic (Ej: Mostrar Canvas)")]
     public UnityEvent onCustomClick;
 
     public int optionIndex;
-    // Evento antiguo (Por si tienes otros scripts usándolo para teletransportar)
+    // Evento antiguo (Por si tienes otros scripts usï¿½ndolo para teletransportar)
     public static event System.Action<int> OnOptionSelected;
 
-    // NUEVO: Evento que solo sirve para decirle al menú "Cierra los visuales, que han hecho click"
+    // NUEVO: Evento que solo sirve para decirle al menï¿½ "Cierra los visuales, que han hecho click"
     public static event System.Action OnMenuInteractionConfirmed;
 
     Vector3 targetLocalPos;
@@ -387,17 +399,17 @@ public class FanOption : MonoBehaviour
     private float currentScaleMultiplier = 1f;
 
     [Header("Accesibilidad - Movimiento Relax")]
-    [Tooltip("Velocidad de atracción y crecimiento (menor = más zen)")]
+    [Tooltip("Velocidad de atracciï¿½n y crecimiento (menor = mï¿½s zen)")]
     public float smoothSpeed = 4f;
 
     [Header("Feedback Visual y Tiempos")]
-    [Tooltip("Cuánto crece el botón al acercar la mano (1.25 = 25% más grande)")]
+    [Tooltip("Cuï¿½nto crece el botï¿½n al acercar la mano (1.25 = 25% mï¿½s grande)")]
     public float maxGrowth = 1.25f;
-    [Tooltip("Cuánto aumenta la luz al cargar (1.5 = 50% más brillante)")]
+    [Tooltip("Cuï¿½nto aumenta la luz al cargar (1.5 = 50% mï¿½s brillante)")]
     public float maxBrightness = 1.5f;
 
     // --- LA REGLA DE ORO DE ACCESIBILIDAD ---
-    [Tooltip("Porcentaje mínimo que debe inflarse el botón antes de permitir hacer clic (0.95 = 95%)")]
+    [Tooltip("Porcentaje mï¿½nimo que debe inflarse el botï¿½n antes de permitir hacer clic (0.95 = 95%)")]
     [Range(0f, 1f)] public float requiredInflationToClick = 0.95f;
 
     private Color baseEmissionColor = Color.black;
@@ -465,7 +477,7 @@ public class FanOption : MonoBehaviour
 
     void Update()
     {
-        // El reloj "Asesino de Bugs": si el botón lleva vivo más de 1 segundo, 
+        // El reloj "Asesino de Bugs": si el botï¿½n lleva vivo mï¿½s de 1 segundo, 
         // anulamos el seguro del teletransporte porque ya es imposible que sea un bug.
         lifeTime += Time.deltaTime;
         if (needsReset && lifeTime > 1.0f)
@@ -477,7 +489,7 @@ public class FanOption : MonoBehaviour
         {
             ProcessInteractions();
 
-            // Calculamos cuánto DEBE crecer según la proximidad de la mano
+            // Calculamos cuï¿½nto DEBE crecer segï¿½n la proximidad de la mano
             float interactionLevel = Mathf.Clamp01(Mathf.Max(Mathf.Abs(hover), press));
             float targetScale = Mathf.Lerp(1f, maxGrowth, interactionLevel);
 
@@ -581,7 +593,7 @@ public class FanOption : MonoBehaviour
         }
 
         // --- LA REGLA ESTRICTA DE INFLADO ---
-        // Calculamos qué porcentaje real del inflado se ha completado visualmente (de 0.0 a 1.0)
+        // Calculamos quï¿½ porcentaje real del inflado se ha completado visualmente (de 0.0 a 1.0)
         float currentInflationProgress = 0f;
         if (maxGrowth > 1.01f)
         {
@@ -589,12 +601,12 @@ public class FanOption : MonoBehaviour
         }
         else
         {
-            currentInflationProgress = 1f; // Prevención de errores si el usuario decide poner maxGrowth a 1
+            currentInflationProgress = 1f; // Prevenciï¿½n de errores si el usuario decide poner maxGrowth a 1
         }
 
         // AHORA EXIGIMOS LAS DOS COSAS A LA VEZ PARA HACER EL CLIC:
-        // 1. Que el usuario esté pulsando a fondo (press >= 0.99)
-        // 2. Que el botón haya tenido tiempo de inflarse en pantalla hasta el nivel exigido (ej: 95%)
+        // 1. Que el usuario estï¿½ pulsando a fondo (press >= 0.99)
+        // 2. Que el botï¿½n haya tenido tiempo de inflarse en pantalla hasta el nivel exigido (ej: 95%)
         if (press >= 0.99f && currentInflationProgress >= requiredInflationToClick)
         {
             if (!hasPlayedPressSound && !isSelected)
@@ -609,7 +621,7 @@ public class FanOption : MonoBehaviour
                     audioSource.PlayOneShot(pressSound, 1.0f);
                 }
 
-                // NUEVA LÓGICA MODULAR:
+                // NUEVA Lï¿½GICA MODULAR:
                 OnOptionSelected?.Invoke(optionIndex); // Para los viajes antiguos
                 onCustomClick?.Invoke(); // Ejecuta lo que le pongas en el Inspector (Canvas, etc.)
                 OnMenuInteractionConfirmed?.Invoke(); // Le dice al PalmMenuActivator que se cierre
@@ -677,7 +689,7 @@ public class FanOption : MonoBehaviour
     private float selectionBump = 0f;
     private bool isSelected = false;
 
-    // Seguro: Solo bloquea el Click, pero permite toda la animación visual.
+    // Seguro: Solo bloquea el Click, pero permite toda la animaciï¿½n visual.
     private bool needsReset = true;
 
     private Vector3 handWorldPos;
@@ -694,7 +706,7 @@ public class FanOption : MonoBehaviour
     private float currentScaleMultiplier = 1f;
 
     [Header("Accesibilidad - Movimiento Relax")]
-    [Tooltip("Velocidad de atracción y crecimiento (menor = más zen)")]
+    [Tooltip("Velocidad de atracciï¿½n y crecimiento (menor = mï¿½s zen)")]
     public float smoothSpeed = 4f;
 
     [Header("Feedback Visual")]
@@ -766,7 +778,7 @@ public class FanOption : MonoBehaviour
         {
             ProcessInteractions();
 
-            // Crecimiento guiado por la atracción pura
+            // Crecimiento guiado por la atracciï¿½n pura
             float interactionLevel = Mathf.Clamp01(Mathf.Max(Mathf.Abs(hover), press));
             float targetScale = Mathf.Lerp(1f, maxGrowth, interactionLevel);
 
@@ -782,7 +794,7 @@ public class FanOption : MonoBehaviour
             currentInteractionRotation = Quaternion.Slerp(currentInteractionRotation, Quaternion.identity, Time.deltaTime * smoothSpeed);
         }
 
-        // Flotación constante que no se interrumpe nunca
+        // Flotaciï¿½n constante que no se interrumpe nunca
         float breath = Mathf.Sin(Time.time * 1.5f + randomBreathPhase) * 0.005f;
         Vector3 breathOffset = new Vector3(0, breath, 0);
 
@@ -804,7 +816,7 @@ public class FanOption : MonoBehaviour
     {
         Vector3 targetOffset = Vector3.zero;
 
-        // Atracción hacia la mano bloqueada en el plano 2D (Y = 0)
+        // Atracciï¿½n hacia la mano bloqueada en el plano 2D (Y = 0)
         Vector3 directionWorld = handWorldPos - GetBaseWorldPosition();
         Vector3 directionLocal = transform.parent != null
             ? transform.parent.InverseTransformDirection(directionWorld)
@@ -821,7 +833,7 @@ public class FanOption : MonoBehaviour
         float attractionLevel = Mathf.Clamp01(Mathf.Max(Mathf.Abs(hover), press));
         targetOffset = flatDirection * (attractionLevel * 0.08f);
 
-        // Repulsión de vecinos plana (para mantener distancias sin saltar hacia arriba/abajo)
+        // Repulsiï¿½n de vecinos plana (para mantener distancias sin saltar hacia arriba/abajo)
         Vector3 neighborRepulsion = Vector3.zero;
         if (transform.parent != null)
         {
@@ -855,7 +867,7 @@ public class FanOption : MonoBehaviour
 
     public void SetHover(float v)
     {
-        // ¡LA VENDA FUERA! Siempre registra la curiosidad de la mano.
+        // ï¿½LA VENDA FUERA! Siempre registra la curiosidad de la mano.
         hover = Mathf.Clamp(v, -1f, 1f);
     }
 
@@ -863,15 +875,15 @@ public class FanOption : MonoBehaviour
     {
         float incomingPress = Mathf.Clamp01(v);
 
-        // ¡LA VENDA FUERA! Siempre guarda la presión para que las animaciones visuales funcionen.
+        // ï¿½LA VENDA FUERA! Siempre guarda la presiï¿½n para que las animaciones visuales funcionen.
         press = incomingPress;
 
-        // Si está naciendo o muriendo, NO EVALUAMOS CLICKS. 
-        // Así evitamos viajar por accidente a mitad de animación.
+        // Si estï¿½ naciendo o muriendo, NO EVALUAMOS CLICKS. 
+        // Asï¿½ evitamos viajar por accidente a mitad de animaciï¿½n.
         if (isAppearing || isFadingOut) return;
 
-        // El seguro ahora es perfecto: como el botón ya vio llegar tu mano de lejos, 
-        // no se asustará ni se bloqueará.
+        // El seguro ahora es perfecto: como el botï¿½n ya vio llegar tu mano de lejos, 
+        // no se asustarï¿½ ni se bloquearï¿½.
         if (needsReset)
         {
             if (incomingPress < 0.5f) needsReset = false;
@@ -957,7 +969,7 @@ public class FanOption : MonoBehaviour
     private float selectionBump = 0f;
     private bool isSelected = false;
 
-    // Seguro silencioso: Evita clicks fantasmas al teletransportarse, pero no interrumpe NINGUNA animación.
+    // Seguro silencioso: Evita clicks fantasmas al teletransportarse, pero no interrumpe NINGUNA animaciï¿½n.
     private bool ghostClickPreventer = true;
 
     private Vector3 handWorldPos;
@@ -973,13 +985,13 @@ public class FanOption : MonoBehaviour
     private float currentScaleMultiplier = 1f;
 
     [Header("Accesibilidad - Movimiento Relax")]
-    [Tooltip("Velocidad de todas las animaciones (menor = más suave y zen)")]
+    [Tooltip("Velocidad de todas las animaciones (menor = mï¿½s suave y zen)")]
     public float smoothSpeed = 3.5f;
 
     [Header("Feedback Visual")]
-    [Tooltip("Cuánto crece el botón al acercar la mano (1.25 = 25% más grande)")]
+    [Tooltip("Cuï¿½nto crece el botï¿½n al acercar la mano (1.25 = 25% mï¿½s grande)")]
     public float maxGrowth = 1.25f;
-    [Tooltip("Cuánto aumenta la luz al cargar (1.5 = 50% más brillante)")]
+    [Tooltip("Cuï¿½nto aumenta la luz al cargar (1.5 = 50% mï¿½s brillante)")]
     public float maxBrightness = 1.5f;
     private Color baseEmissionColor = Color.black;
 
@@ -1047,11 +1059,11 @@ public class FanOption : MonoBehaviour
         {
             ProcessInteractions();
 
-            // Crecimiento suave basado puramente en cuánto te acercas
+            // Crecimiento suave basado puramente en cuï¿½nto te acercas
             float interactionLevel = Mathf.Clamp01(Mathf.Max(Mathf.Abs(hover), press));
             float targetScale = Mathf.Lerp(1f, maxGrowth, interactionLevel);
 
-            // Armonía: Se escala usando el mismo suavizado que el movimiento
+            // Armonï¿½a: Se escala usando el mismo suavizado que el movimiento
             currentScaleMultiplier = Mathf.Lerp(currentScaleMultiplier, targetScale, Time.deltaTime * smoothSpeed);
             transform.localScale = baseScale * currentScaleMultiplier;
 
@@ -1059,12 +1071,12 @@ public class FanOption : MonoBehaviour
         }
         else if (isFadingOut)
         {
-            // Retorno suave a la posición base
+            // Retorno suave a la posiciï¿½n base
             currentInteractionOffset = Vector3.Lerp(currentInteractionOffset, Vector3.zero, Time.deltaTime * smoothSpeed);
             currentInteractionRotation = Quaternion.Slerp(currentInteractionRotation, Quaternion.identity, Time.deltaTime * smoothSpeed);
         }
 
-        // Flotación constante (Eje Y) inalterada
+        // Flotaciï¿½n constante (Eje Y) inalterada
         float breath = Mathf.Sin(Time.time * 1.5f + randomBreathPhase) * 0.005f;
         Vector3 breathOffset = new Vector3(0, breath, 0);
 
@@ -1087,7 +1099,7 @@ public class FanOption : MonoBehaviour
         Vector3 targetOffset = Vector3.zero;
         Quaternion targetRotation = Quaternion.identity;
 
-        // 1. Atracción hacia la mano
+        // 1. Atracciï¿½n hacia la mano
         Vector3 directionWorld = handWorldPos - GetBaseWorldPosition();
         Vector3 directionLocal = transform.parent != null
             ? transform.parent.InverseTransformDirection(directionWorld)
@@ -1102,13 +1114,13 @@ public class FanOption : MonoBehaviour
             flatDirection = directionLocal.normalized;
         }
 
-        // Simplemente calculamos el nivel de interés (hover o press)
+        // Simplemente calculamos el nivel de interï¿½s (hover o press)
         float attractionLevel = Mathf.Clamp01(Mathf.Max(Mathf.Abs(hover), press));
 
-        // El botón se desliza hasta un máximo de 8cm hacia la mano
+        // El botï¿½n se desliza hasta un mï¿½ximo de 8cm hacia la mano
         targetOffset = flatDirection * (attractionLevel * 0.08f);
 
-        // 2. Repulsión entre vecinos
+        // 2. Repulsiï¿½n entre vecinos
         Vector3 neighborRepulsion = Vector3.zero;
         if (transform.parent != null)
         {
@@ -1117,7 +1129,7 @@ public class FanOption : MonoBehaviour
                 if (sibling == transform) continue;
 
                 Vector3 diff = transform.position - sibling.position;
-                // BLOQUEO AL PLANO PARA VECINOS: Así no se empujan hacia arriba o abajo
+                // BLOQUEO AL PLANO PARA VECINOS: Asï¿½ no se empujan hacia arriba o abajo
                 diff.y = 0;
 
                 float dist = diff.magnitude;
@@ -1134,7 +1146,7 @@ public class FanOption : MonoBehaviour
         }
         targetOffset += neighborRepulsion;
 
-        // 3. Rebote de selección
+        // 3. Rebote de selecciï¿½n
         targetOffset += Vector3.down * selectionBump;
 
         // Suavizado total e incondicional
@@ -1156,17 +1168,17 @@ public class FanOption : MonoBehaviour
 
         float incomingPress = Mathf.Clamp01(v);
 
-        // Siempre lo aceptamos visualmente. Si retira la mano, esto bajará suavemente a 0.
+        // Siempre lo aceptamos visualmente. Si retira la mano, esto bajarï¿½ suavemente a 0.
         press = incomingPress;
 
         // Seguro para el Click (Para no activar el viaje sin querer)
         if (ghostClickPreventer)
         {
             if (incomingPress < 0.5f) ghostClickPreventer = false;
-            else return; // Bloquea ÚNICAMENTE el click final, pero permite toda la animación visual.
+            else return; // Bloquea ï¿½NICAMENTE el click final, pero permite toda la animaciï¿½n visual.
         }
 
-        // Acción de Confirmación
+        // Acciï¿½n de Confirmaciï¿½n
         if (press >= 0.99f)
         {
             if (!hasPlayedPressSound && !isSelected)

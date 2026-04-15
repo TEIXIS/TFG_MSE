@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -5,24 +6,24 @@ using UnityEngine;
 [System.Serializable]
 public struct ElementoVR
 {
-    [Tooltip("El ID que enviará la tablet (Ej: 'Rojo', 'Azul')")]
+    [Tooltip("El ID que enviarï¿½ la tablet (Ej: 'Rojo', 'Azul')")]
     public string idElemento;
 
-    [Tooltip("El prefab pequeño (cubo) para el menú de la mano")]
+    [Tooltip("El prefab pequeï¿½o (cubo) para el menï¿½ de la mano")]
     public GameObject prefabMenuMano;
 
-    [Tooltip("El prefab grande que aparecerá físicamente en la sala")]
+    [Tooltip("El prefab grande que aparecerï¿½ fï¿½sicamente en la sala")]
     public GameObject prefabHabitacion;
 }
 
-// --- NUEVA ESTRUCTURA: Empareja la aparición con el teletransporte ---
+// --- NUEVA ESTRUCTURA: Empareja la apariciï¿½n con el teletransporte ---
 [System.Serializable]
 public struct PuntoSala
 {
-    [Tooltip("El punto vacío donde aparecerá el objeto grande")]
+    [Tooltip("El punto vacï¿½o donde aparecerï¿½ el objeto grande")]
     public Transform puntoAparicion;
 
-    [Tooltip("El punto vacío donde se teletransportará el jugador para mirarlo")]
+    [Tooltip("El punto vacï¿½o donde se teletransportarï¿½ el jugador para mirarlo")]
     public Transform puntoTeletransporte;
 }
 
@@ -33,13 +34,13 @@ public class SceneManager : MonoBehaviour
 
     // Memoria para saber si el usuario juega sentado o de pie
     private bool usuarioSentado = false;
-    // Memoria para saber si el terapeuta deja usar el menú de manos
+    // Memoria para saber si el terapeuta deja usar el menï¿½ de manos
     private bool permisoMenuVRTerapeuta = true;
-    // Memoria para saber si el terapeuta deja ver las partículas
+    // Memoria para saber si el terapeuta deja ver las partï¿½culas
     private bool permisoParticulasTerapeuta = true;
 
     [Header("Efectos de Manos")]
-    [Tooltip("Arrastra aquí los GameObjects o Sistemas de Partículas de las manos")]
+    [Tooltip("Arrastra aquï¿½ los GameObjects o Sistemas de Partï¿½culas de las manos")]
     public GameObject particulasManoIzquierda;
     public GameObject particulasManoDerecha;
 
@@ -49,26 +50,31 @@ public class SceneManager : MonoBehaviour
     [Header("Passthrough (AR -> VR)")]
     public OVRPassthroughLayer passthroughLayer;
 
-    [Header("Gestión de Red")]
+    [Header("Gestiï¿½n de Red")]
     public LANDiscovery lanDiscovery;
     public Connection connectionServer;
 
     [Header("Gestor de Teletransporte")]
-    [Tooltip("Arrastra aquí el objeto que tiene tu script TeleportManager")]
+    [Tooltip("Arrastra aquï¿½ el objeto que tiene tu script TeleportManager")]
     public TeleportManager teleportManager;
 
-    [Header("Menú de Inicio (2 Opciones)")]
+    [Header("Menï¿½ de Inicio (2 Opciones)")]
     public PalmMenuActivator menuActivator;
     public List<GameObject> initialOptions;
     public float distanciaMenuInicial = 0.35f;
     public float separacionMenuInicial = 45f;
 
-    [Header("Menú de Usuarios (Hasta 6 Opciones)")]
+    [Header("Menï¿½ de Usuarios (Hasta 5 Opciones)")]
     public List<GameObject> userSelectionOptions;
     [Header("Base de Datos (Nombres)")]
-    public List<string> nombresDeUsuarios = new List<string> { "Ana", "Carles", "Joan", "David", "Elena" };
-    public float distanciaMenuUsuarios = 0.5f;
+    private List<string> nombresDeUsuarios = new List<string> { "Ana", "Carles", "Joan", "David", "Elena","A1", "B2", "C3", "D4", "E5","F6" };    private int paginaActualUsuarios = 0;
+    private const int maxNombresPorPagina = 5;    public float distanciaMenuUsuarios = 0.5f;
     public float separacionMenuUsuarios = 30f;
+    private List<string> labelsPaginaActual = new List<string>();
+    private const int primeraOpcionNombreIndex = 1;
+    private const int ultimaOpcionNombreIndex = 5;
+    private const int indexFlechaIzquierda = 0;
+    private const int indexFlechaDerecha = 6;
 
     [Header("Referencias de la Escena")]
     public GameObject canvasConexion;
@@ -79,7 +85,7 @@ public class SceneManager : MonoBehaviour
     [Header("Base de Datos de Elementos (Colores)")]
     public List<ElementoVR> baseDatosElementos;
 
-    [Header("Puntos de Aparición y Teletransporte (Sala)")]
+    [Header("Puntos de Apariciï¿½n y Teletransporte (Sala)")]
     public List<PuntoSala> puntosDeAparicion;
 
     private List<GameObject> objetosGeneradosEnSala = new List<GameObject>();
@@ -87,14 +93,14 @@ public class SceneManager : MonoBehaviour
 
     private bool tabletRecienConectada = false;
 
-    // --- NUEVO: Variable para recordar qué objeto de tutorial está activo y poder borrarlo ---
+    // --- NUEVO: Variable para recordar quï¿½ objeto de tutorial estï¿½ activo y poder borrarlo ---
     private GameObject elementoTutorialActivo;
 
 
-    // Diccionario mágico para recordar en qué coordenada ha caído cada elemento
+    // Diccionario mï¿½gico para recordar en quï¿½ coordenada ha caï¿½do cada elemento
     private Dictionary<string, Transform> mapaDeTeleports = new Dictionary<string, Transform>();
 
-    // Lista secreta para traducir índices del menú de mano a IDs de la tablet
+    // Lista secreta para traducir ï¿½ndices del menï¿½ de mano a IDs de la tablet
     private List<string> idsOrdenadosParaTeleport = new List<string>();
 
 
@@ -112,6 +118,7 @@ public class SceneManager : MonoBehaviour
             Debug.LogWarning("No has asignado el script Connection al SceneManager.");
         }
 
+        StartCoroutine(CargarUsuariosIndependent());
         yield return new WaitForSeconds(2.0f);
 
         if (menuActivator != null && initialOptions != null && initialOptions.Count > 0)
@@ -124,13 +131,62 @@ public class SceneManager : MonoBehaviour
             menuActivator.OpenMenu(initialOptions);
         }
 
-        // Líneas de prueba: simula que la tablet envía datos
+        // Lï¿½neas de prueba: simula que la tablet envï¿½a datos
       //  List<string> coloresDePrueba = new List<string> { "blau_cel", "groc", "rosa","verd","taronja","blau_fosc" };
       //  RecibirDatosDeLaTablet(coloresDePrueba);
     }
 
-    void OnEnable() { FanOption.OnInitialMenuSelected += AccionDelBoton; if (teleportManager != null) teleportManager.OnUsuarioTeletransportado += AvisarTabletUbicacion; }
-    void OnDisable() { FanOption.OnInitialMenuSelected -= AccionDelBoton; if (teleportManager != null) teleportManager.OnUsuarioTeletransportado -= AvisarTabletUbicacion; }
+    IEnumerator CargarUsuariosIndependent()
+    {
+        List<string> usuarios = null;
+        string error = null;
+
+        yield return StartCoroutine(UserAPI.GetUsers(
+            users =>
+            {
+                usuarios = new List<string>();
+                foreach (var us in users)
+                {
+                    if (us != null && us.independent)
+                        usuarios.Add(us.nom);
+                }
+            },
+            err =>
+            {
+                error = err;
+            }
+        ));
+
+        if (!string.IsNullOrEmpty(error))
+        {
+            Debug.LogWarning("[API] No se pudieron cargar los usuarios: " + error);
+        }
+        else if (usuarios != null)
+        {
+            nombresDeUsuarios = usuarios;
+            if (usuarios.Count == 0)
+            {
+                Debug.LogWarning("[API] No se encontraron usuarios con independent=true.");
+            }
+            else
+            {
+                Debug.Log($"[API] Cargados {usuarios.Count} usuarios independientes.");
+            }
+        }
+    }
+
+    void OnEnable()
+    {
+        FanOption.OnInitialMenuSelectedWithLabel += AccionDelBotonConLabel;
+        if (teleportManager != null)
+            teleportManager.OnUsuarioTeletransportado += AvisarTabletUbicacion;
+    }
+    void OnDisable()
+    {
+        FanOption.OnInitialMenuSelectedWithLabel -= AccionDelBotonConLabel;
+        if (teleportManager != null)
+            teleportManager.OnUsuarioTeletransportado -= AvisarTabletUbicacion;
+    }
 
     void AvisarTabletUbicacion(int index)
     {
@@ -145,11 +201,11 @@ public class SceneManager : MonoBehaviour
         }
     }
 
-    void AccionDelBoton(int index)
+    void AccionDelBotonConLabel(int index, string label)
     {
         if (faseActual == FaseApp.MenuInicial)
         {
-            if (index == 1) // ESPERAR CONEXIÓN
+            if (index == 1) // ESPERAR CONEXIÃ“N
             {
                 faseActual = FaseApp.EsperandoConexion;
 
@@ -179,23 +235,134 @@ public class SceneManager : MonoBehaviour
                 Debug.Log("Iniciando modo Multidispositivo. Encendiendo LAN Discovery...");
                 if (lanDiscovery != null) lanDiscovery.StartBroadcast();
             }
-            else if (index == 0) // SELECCIÓN DE USUARIO
+            else if (index == 0) // SELECCIÃ“N DE USUARIO
             {
                 faseActual = FaseApp.SeleccionandoUsuario;
                 StartCoroutine(TransicionAlMenuUsuarios());
             }
+
+            return;
         }
-        else if (faseActual == FaseApp.SeleccionandoUsuario)
+
+        if (faseActual == FaseApp.SeleccionandoUsuario)
         {
-            Debug.Log($"Usuario {index} seleccionado. Iniciando experiencia VR...");
-            faseActual = FaseApp.Jugando;
-            StartCoroutine(EsperarCierreMenuYIniciarVR());
+            Debug.Log($"[MENÃš] Click index={index}, label='{label}', pÃ¡gina actual={paginaActualUsuarios}");
+
+            if (label == "<-")
+            {
+                MostrarPaginaUsuarios(paginaActualUsuarios - 1);
+                return;
+            }
+
+            if (label == "->")
+            {
+                MostrarPaginaUsuarios(paginaActualUsuarios + 1);
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(label))
+            {
+                string nombreSeleccionado = label;
+                Debug.Log($"[MENÃš] Usuario seleccionado: {nombreSeleccionado}");
+
+                faseActual = FaseApp.Jugando;
+                if (menuActivator != null)
+                {
+                    menuActivator.isLockedOpen = false;
+                    menuActivator.CloseMenuPublic(0.5f);
+                }
+
+                StartCoroutine(EsperarCierreMenuYIniciarVR());
+            }
         }
     }
 
+    void AccionDelBoton(int index)
+    {
+        if (faseActual == FaseApp.MenuInicial)
+        {
+            if (index == 1) // ESPERAR CONEXIÃ“N
+            {
+                faseActual = FaseApp.EsperandoConexion;
+
+                if (canvasConexion != null)
+                {
+                    canvasConexion.SetActive(true);
+                    Canvas canvasComp = canvasConexion.GetComponent<Canvas>();
+                    if (canvasComp != null) canvasComp.enabled = true;
+
+                    if (Camera.main != null)
+                    {
+                        Transform cam = Camera.main.transform;
+                        Vector3 direccionPlana = cam.forward;
+                        direccionPlana.y = 0;
+                        direccionPlana.Normalize();
+
+                        canvasConexion.transform.position = cam.position + (direccionPlana * 1.0f);
+                        canvasConexion.transform.rotation = Quaternion.LookRotation(direccionPlana);
+                    }
+                    else if (menuActivator != null && menuActivator.fanMenu != null)
+                    {
+                        canvasConexion.transform.position = menuActivator.fanMenu.transform.position;
+                        canvasConexion.transform.rotation = menuActivator.fanMenu.transform.rotation;
+                    }
+                }
+
+                Debug.Log("Iniciando modo Multidispositivo. Encendiendo LAN Discovery...");
+                if (lanDiscovery != null) lanDiscovery.StartBroadcast();
+            }
+            else if (index == 0) // SELECCIÃ“N DE USUARIO
+            {
+                faseActual = FaseApp.SeleccionandoUsuario;
+                StartCoroutine(TransicionAlMenuUsuarios());
+            }
+
+            return;
+        }
+
+        if (faseActual == FaseApp.SeleccionandoUsuario)
+        {
+            if (index < 0 || index >= labelsPaginaActual.Count)
+            {
+                Debug.LogWarning($"[MENÃš] Ãndice fuera de rango: {index}");
+                return;
+            }
+
+            string label = labelsPaginaActual[index];
+
+            Debug.Log($"[MENÃš] Click lÃ³gico index={index}, label='{label}', pÃ¡gina={paginaActualUsuarios}");
+
+            if (index == indexFlechaIzquierda)
+            {
+                MostrarPaginaUsuarios(paginaActualUsuarios - 1);
+                return;
+            }
+
+            if (index == indexFlechaDerecha)
+            {
+                MostrarPaginaUsuarios(paginaActualUsuarios + 1);
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(label))
+            {
+                string nombreSeleccionado = label;
+                Debug.Log($"[MENÃš] Usuario seleccionado: {nombreSeleccionado}");
+
+                faseActual = FaseApp.Jugando;
+                if (menuActivator != null)
+                {
+                    menuActivator.isLockedOpen = false;
+                    menuActivator.CloseMenuPublic(0.5f);
+                }
+
+                StartCoroutine(EsperarCierreMenuYIniciarVR());
+            }
+        }
+    }
     void OnTabletConnected()
     {
-        Debug.Log("¡Conexión recibida de la tablet! Transicionando a VR...");
+        Debug.Log("ï¿½Conexiï¿½n recibida de la tablet! Transicionando a VR...");
         tabletRecienConectada = true;
     }
 
@@ -208,34 +375,115 @@ public class SceneManager : MonoBehaviour
     IEnumerator TransicionAlMenuUsuarios()
     {
         yield return new WaitForSeconds(0.6f);
-
-        if (menuActivator != null && userSelectionOptions != null && userSelectionOptions.Count > 0)
-        {
-            menuActivator.isLockedOpen = true;
-            menuActivator.distancia = distanciaMenuUsuarios;
-            if (menuActivator.fanMenu != null) menuActivator.fanMenu.spacingAngle = separacionMenuUsuarios;
-
-            menuActivator.OpenMenu(userSelectionOptions);
-
-            if (menuActivator.fanMenu != null)
-            {
-                int i = 0;
-                foreach (Transform botonClonado in menuActivator.fanMenu.transform)
-                {
-                    if (i < nombresDeUsuarios.Count)
-                    {
-                        TMPro.TMP_Text texto = botonClonado.GetComponentInChildren<TMPro.TMP_Text>();
-                        if (texto != null) texto.text = nombresDeUsuarios[i];
-                    }
-                    i++;
-                }
-            }
-        }
+        MostrarPaginaUsuarios(0);
     }
 
     // ==========================================
     // FASE VR COMPLETA (CON FUNDIDO)
     // ==========================================
+
+    void MostrarPaginaUsuarios(int numeroPagina)
+    {
+        if (menuActivator == null || userSelectionOptions == null || userSelectionOptions.Count < 7)
+        {
+            Debug.LogError("[MENÃš] Necesitas exactamente 7 elementos en userSelectionOptions");
+            return;
+        }
+        Debug.Log($"[MENÃš] MostrarPaginaUsuarios() recibido={numeroPagina}");
+        int nombresPorPagina = maxNombresPorPagina; // 5
+        int totalNombres = nombresDeUsuarios.Count;
+        int totalPaginas = Mathf.Max(1, Mathf.CeilToInt((float)totalNombres / nombresPorPagina));
+
+        numeroPagina = Mathf.Clamp(numeroPagina, 0, totalPaginas - 1);
+        paginaActualUsuarios = numeroPagina;
+        
+        int inicio = numeroPagina * nombresPorPagina;
+        Debug.Log($"[MENÃš] PÃ¡gina final={numeroPagina}, totalPaginas={totalPaginas}, inicio={inicio}");
+
+        labelsPaginaActual.Clear();
+
+        // Siempre 7 labels lÃ³gicos
+        labelsPaginaActual.Add("<-");
+
+        for (int i = 0; i < nombresPorPagina; i++)
+        {
+            int nameIndex = inicio + i;
+            if (nameIndex < totalNombres)
+                labelsPaginaActual.Add(nombresDeUsuarios[nameIndex]);
+            else
+                labelsPaginaActual.Add("");
+        }
+
+        labelsPaginaActual.Add("->");
+        Debug.Log($"[MENÃš] Labels pÃ¡gina: {string.Join(" | ", labelsPaginaActual)}");
+        // Siempre 7 prefabs fijos, en este orden lÃ³gico
+        List<GameObject> opcionesActivas = new List<GameObject>
+        {
+            userSelectionOptions[0], // flecha izquierda
+            userSelectionOptions[1], // nombre 1
+            userSelectionOptions[2], // nombre 2
+            userSelectionOptions[3], // nombre 3
+            userSelectionOptions[4], // nombre 4
+            userSelectionOptions[5], // nombre 5
+            userSelectionOptions[6]  // flecha derecha
+        };
+
+        menuActivator.isLockedOpen = true;
+        menuActivator.distancia = distanciaMenuUsuarios;
+
+        if (menuActivator.fanMenu != null)
+            menuActivator.fanMenu.spacingAngle = separacionMenuUsuarios;
+
+        menuActivator.CloseMenuPublic(0f);
+        menuActivator.OpenMenu(opcionesActivas, true);
+
+        StartCoroutine(AssignarTextosMenuUsuari());
+    }
+
+    IEnumerator AssignarTextosMenuUsuari()
+    {
+        // Esperamos a que FanMenu termine de construir
+        yield return null;
+        yield return new WaitForEndOfFrame();
+
+        if (menuActivator == null || menuActivator.fanMenu == null)
+            yield break;
+
+        List<FanOption> options = new List<FanOption>();
+        foreach (Transform child in menuActivator.fanMenu.transform)
+        {
+            FanOption fo = child.GetComponent<FanOption>();
+            if (fo != null)
+                options.Add(fo);
+        }
+
+        if (options.Count != labelsPaginaActual.Count)
+        {
+            Debug.LogWarning($"[MENÃš] NÂº de botones visuales ({options.Count}) distinto de labels lÃ³gicos ({labelsPaginaActual.Count})");
+        }
+
+        // Lo importante: usar optionIndex, no el orden visual del transform
+        foreach (FanOption option in options)
+        {
+            int logicalIndex = option.optionIndex;
+
+            if (logicalIndex < 0 || logicalIndex >= labelsPaginaActual.Count)
+            {
+                Debug.LogWarning($"[MENÃš] optionIndex invÃ¡lido: {logicalIndex}");
+                continue;
+            }
+
+            TMPro.TMP_Text texto = option.GetComponentInChildren<TMPro.TMP_Text>();
+            if (texto == null)
+            {
+                Debug.LogError($"[MENÃš] BotÃ³n con optionIndex={logicalIndex} sin TMP_Text");
+                continue;
+            }
+
+            texto.text = labelsPaginaActual[logicalIndex];
+            Debug.Log($"[MENÃš] optionIndex={logicalIndex} -> '{labelsPaginaActual[logicalIndex]}'");
+        }
+    }
 
     void IniciarExperienciaVR()
     {
@@ -267,11 +515,11 @@ public class SceneManager : MonoBehaviour
         if (teleportManager != null)
             yield return StartCoroutine(teleportManager.FadeToClear(1.5f));
 
-        Debug.Log("¡Transición a VR completada con elegancia!");
+        Debug.Log("ï¿½Transiciï¿½n a VR completada con elegancia!");
     }
 
     // ==========================================
-    // EMERGENCIA SOS (CON FUNDIDO RÁPIDO)
+    // EMERGENCIA SOS (CON FUNDIDO Rï¿½PIDO)
     // ==========================================
 
     public void ActivarModoSOS()
@@ -282,17 +530,17 @@ public class SceneManager : MonoBehaviour
 
     IEnumerator RutinaSOS()
     {
-        Debug.LogWarning("¡SEÑAL SOS RECIBIDA! Iniciando fundido de emergencia.");
+        Debug.LogWarning("ï¿½SEï¿½AL SOS RECIBIDA! Iniciando fundido de emergencia.");
 
-        // 1. Pantalla a negro rápida (0.4 segundos). Cortamos estímulos casi al instante.
+        // 1. Pantalla a negro rï¿½pida (0.4 segundos). Cortamos estï¿½mulos casi al instante.
         if (teleportManager != null)
             yield return StartCoroutine(teleportManager.FadeToBlack(0.4f));
 
-        // 2. En la oscuridad, apagamos la sala virtual y activamos las cámaras reales
+        // 2. En la oscuridad, apagamos la sala virtual y activamos las cï¿½maras reales
         if (salaMultisensorial != null) salaMultisensorial.SetActive(false);
         if (passthroughLayer != null) passthroughLayer.hidden = false;
 
-        // Bloqueamos el menú por seguridad
+        // Bloqueamos el menï¿½ por seguridad
         if (menuActivator != null) menuActivator.canOpenWithPalms = false;
 
         // 3. Volvemos a la luz del mundo real a una velocidad suave (1.0 segundos)
@@ -304,7 +552,7 @@ public class SceneManager : MonoBehaviour
 
     void Update()
     {
-        // 1. Lógica de cuando la tablet se conecta por primera vez
+        // 1. Lï¿½gica de cuando la tablet se conecta por primera vez
         if (tabletRecienConectada && faseActual == FaseApp.EsperandoConexion)
         {
             tabletRecienConectada = false;
@@ -316,7 +564,7 @@ public class SceneManager : MonoBehaviour
             ProcesarCambioAPassthrough(FaseApp.Tutorial);
         }
 
-        // 2. NUEVO: LÓGICA PARA ESCUCHAR A LA TABLET CONSTANTEMENTE
+        // 2. NUEVO: Lï¿½GICA PARA ESCUCHAR A LA TABLET CONSTANTEMENTE
         if (connectionServer != null && connectionServer.connected)
         {
             // TryDequeue saca los mensajes de la cola de tu script Connection
@@ -330,13 +578,13 @@ public class SceneManager : MonoBehaviour
                 }
                 else if (mensajeRecibido == "CMD_TUTORIAL")
                 {
-                    // Delegamos la decisión a nuestra nueva función inteligente
+                    // Delegamos la decisiï¿½n a nuestra nueva funciï¿½n inteligente
                     ProcesarCambioAPassthrough(FaseApp.Tutorial);
                     continue;
                 }
                 else if (mensajeRecibido == "CMD_PREPARACION")
                 {
-                    // Delegamos la decisión (usamos FaseApp.Jugando pero con la sala apagada)
+                    // Delegamos la decisiï¿½n (usamos FaseApp.Jugando pero con la sala apagada)
                     ProcesarCambioAPassthrough(FaseApp.Jugando);
                     continue;
                 }
@@ -381,13 +629,13 @@ public class SceneManager : MonoBehaviour
                 else if (mensajeRecibido == "POSTURA:SENTADO")
                 {
                     usuarioSentado = true;
-                    Debug.Log("Modo Sentado: Restringiendo aparición a 180º frontales.");
+                    Debug.Log("Modo Sentado: Restringiendo apariciï¿½n a 180ï¿½ frontales.");
                     continue;
                 }
                 else if (mensajeRecibido == "POSTURA:DE_PIE")
                 {
                     usuarioSentado = false;
-                    Debug.Log("Modo De Pie: Aparición 360º libre.");
+                    Debug.Log("Modo De Pie: Apariciï¿½n 360ï¿½ libre.");
                     continue;
                 }
                 else if (mensajeRecibido == "CMD_MENU_VR:ON")
@@ -405,7 +653,7 @@ public class SceneManager : MonoBehaviour
                 else if (mensajeRecibido == "CMD_PARTICULAS:ON")
                 {
                     permisoParticulasTerapeuta = true;
-                    // Encendemos los objetos de partículas en vivo
+                    // Encendemos los objetos de partï¿½culas en vivo
                     if (particulasManoIzquierda != null) particulasManoIzquierda.SetActive(true);
                     if (particulasManoDerecha != null) particulasManoDerecha.SetActive(true);
                     continue;
@@ -413,7 +661,7 @@ public class SceneManager : MonoBehaviour
                 else if (mensajeRecibido == "CMD_PARTICULAS:OFF")
                 {
                     permisoParticulasTerapeuta = false;
-                    // Apagamos los objetos de partículas en vivo
+                    // Apagamos los objetos de partï¿½culas en vivo
                     if (particulasManoIzquierda != null) particulasManoIzquierda.SetActive(false);
                     if (particulasManoDerecha != null) particulasManoDerecha.SetActive(false);
                     continue;
@@ -422,30 +670,30 @@ public class SceneManager : MonoBehaviour
         }
     }
   
-    // --- NUEVO: Función que decide si hace falta fundido o no ---
+    // --- NUEVO: Funciï¿½n que decide si hace falta fundido o no ---
     private void ProcesarCambioAPassthrough(FaseApp nuevaFase)
     {
         if (faseActual == FaseApp.Jugando && salaMultisensorial != null && salaMultisensorial.activeSelf)
         {
-            // CASO A: Venimos del mundo VR (inmersión total). SÍ hacemos el fundido lento a negro.
+            // CASO A: Venimos del mundo VR (inmersiï¿½n total). Sï¿½ hacemos el fundido lento a negro.
             StartCoroutine(RutinaSalidaLentaDeVR(nuevaFase));
         }
         else
         {
-            // CASO B: Ya estábamos en Passthrough (ej: pasando de Tutorial a Preparación).
+            // CASO B: Ya estï¿½bamos en Passthrough (ej: pasando de Tutorial a Preparaciï¿½n).
             // NO hay fundido a negro de pantalla. Solo borramos el objeto 3D del tutorial al instante.
             faseActual = nuevaFase;
 
             if (elementoTutorialActivo != null) Destroy(elementoTutorialActivo);
 
-            // Nos aseguramos de que el entorno VR está apagado y las cámaras encendidas
+            // Nos aseguramos de que el entorno VR estï¿½ apagado y las cï¿½maras encendidas
             if (salaMultisensorial != null) salaMultisensorial.SetActive(false);
             if (passthroughLayer != null) passthroughLayer.hidden = false;
             if (menuActivator != null) menuActivator.canOpenWithPalms = false;
         }
     }
 
-    // --- NUEVO: Rutina de salida MUCHO más lenta y agradable ---
+    // --- NUEVO: Rutina de salida MUCHO mï¿½s lenta y agradable ---
     IEnumerator RutinaSalidaLentaDeVR(FaseApp nuevaFase)
     {
         // 1. Pantalla a negro lentamente (1.0 segundos para no asustar)
@@ -460,11 +708,11 @@ public class SceneManager : MonoBehaviour
         if (passthroughLayer != null) passthroughLayer.hidden = false;
         if (menuActivator != null) menuActivator.canOpenWithPalms = false;
 
-        // 3. Volvemos a la luz del mundo real a la misma velocidad cómoda que te gustó (1.5 segundos)
+        // 3. Volvemos a la luz del mundo real a la misma velocidad cï¿½moda que te gustï¿½ (1.5 segundos)
         if (teleportManager != null)
             yield return StartCoroutine(teleportManager.FadeToClear(1.5f));
 
-        Debug.Log($"Salida suave de VR completada. Passthrough nítido.");
+        Debug.Log($"Salida suave de VR completada. Passthrough nï¿½tido.");
     }
 
     // ==========================================
@@ -472,7 +720,7 @@ public class SceneManager : MonoBehaviour
     // ==========================================
     void MostrarElementoEnTutorial(string idTablet)
     {
-        // 1. Borramos el elemento que estuviéramos enseñando antes
+        // 1. Borramos el elemento que estuviï¿½ramos enseï¿½ando antes
         if (elementoTutorialActivo != null)
         {
             Destroy(elementoTutorialActivo);
@@ -483,7 +731,7 @@ public class SceneManager : MonoBehaviour
 
         if (elemento.prefabHabitacion != null)
         {
-            // 3. Calculamos una posición cómoda: 1 metro directamente delante de la cara del usuario, a la altura de su pecho
+            // 3. Calculamos una posiciï¿½n cï¿½moda: 1 metro directamente delante de la cara del usuario, a la altura de su pecho
             Transform cam = Camera.main.transform;
             Vector3 direccionPlana = cam.forward;
             direccionPlana.y = 0;
@@ -522,7 +770,7 @@ public class SceneManager : MonoBehaviour
 
         mapaDeTeleports.Clear();
         idsOrdenadosParaTeleport.Clear();
-        // Si había un elemento del tutorial flotando por ahí, lo destruimos
+        // Si habï¿½a un elemento del tutorial flotando por ahï¿½, lo destruimos
         if (elementoTutorialActivo != null) Destroy(elementoTutorialActivo);
 
         foreach (GameObject obj in objetosGeneradosEnSala) { Destroy(obj); }
@@ -532,14 +780,14 @@ public class SceneManager : MonoBehaviour
         List<Transform> destinosTeleportActivos = new List<Transform>();
         // List<PuntoSala> posicionesDisponibles = new List<PuntoSala>(puntosDeAparicion);
 
-        // --- NUEVA LÓGICA DE APARICIÓN (Sentado vs De Pie) ---
+        // --- NUEVA Lï¿½GICA DE APARICIï¿½N (Sentado vs De Pie) ---
         List<PuntoSala> posicionesDisponibles = new List<PuntoSala>();
         List<PuntoSala> puntosTraserosReserva = new List<PuntoSala>();
 
         if (usuarioSentado)
         {
-            // SOLUCIÓN: Usamos el FRENTE ABSOLUTO de la sala virtual en lugar de la cabeza.
-            // Así no importa si el usuario está mirando al suelo o girado al iniciar.
+            // SOLUCIï¿½N: Usamos el FRENTE ABSOLUTO de la sala virtual en lugar de la cabeza.
+            // Asï¿½ no importa si el usuario estï¿½ mirando al suelo o girado al iniciar.
             Vector3 frenteHabitacion = salaMultisensorial != null ? salaMultisensorial.transform.forward : Vector3.forward;
             frenteHabitacion.y = 0;
             frenteHabitacion.Normalize();
@@ -588,7 +836,7 @@ public class SceneManager : MonoBehaviour
 
             if (elemento.idElemento == idTablet && posicionesDisponibles.Count > 0)
             {
-                int indiceAleatorio = Random.Range(0, posicionesDisponibles.Count);
+                int indiceAleatorio = UnityEngine.Random.Range(0, posicionesDisponibles.Count);
                 PuntoSala puntoElegido = posicionesDisponibles[indiceAleatorio];
                 posicionesDisponibles.RemoveAt(indiceAleatorio);
 
@@ -597,7 +845,7 @@ public class SceneManager : MonoBehaviour
 
                 objetosGeneradosEnSala.Add(nuevoObjetoSala);
 
-                // --- NUEVO: Añadimos este objeto al paquete de datos ---
+                // --- NUEVO: Aï¿½adimos este objeto al paquete de datos ---
                 string px = puntoElegido.puntoAparicion.position.x.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
                 string py = puntoElegido.puntoAparicion.position.y.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
                 string pz = puntoElegido.puntoAparicion.position.z.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
@@ -615,7 +863,7 @@ public class SceneManager : MonoBehaviour
         }
 
         // --- NUEVO: Enviamos el mapa completo a la tablet ---
-        if (paqueteSync.EndsWith(";")) paqueteSync = paqueteSync.Substring(0, paqueteSync.Length - 1); // Quitamos el último punto y coma
+        if (paqueteSync.EndsWith(";")) paqueteSync = paqueteSync.Substring(0, paqueteSync.Length - 1); // Quitamos el ï¿½ltimo punto y coma
         if (connectionServer != null && connectionServer.connected) connectionServer.Send(paqueteSync);
 
         if (menuActivator != null) menuActivator.opcionesDePartida = opcionesMenuJugando;
