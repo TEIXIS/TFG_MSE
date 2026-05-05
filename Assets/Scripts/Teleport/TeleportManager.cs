@@ -39,14 +39,15 @@ public class TeleportManager : MonoBehaviour
         Transform targetPoint = teleportDestinations[optionIndex];
         if (targetPoint != null)
         {
-            StartCoroutine(TeleportRoutine(targetPoint));
-
-            //  ¡Gritamos por el altavoz a qué índice hemos viajado! ---
-            OnUsuarioTeletransportado?.Invoke(optionIndex);
+            StartCoroutine(TeleportRoutine(targetPoint, () =>
+            {
+                // Avisamos cuando el viaje ha terminado fisicamente y el usuario vuelve a ver la escena.
+                OnUsuarioTeletransportado?.Invoke(optionIndex);
+            }));
         }
     }
 
-    IEnumerator TeleportRoutine(Transform target)
+    IEnumerator TeleportRoutine(Transform target, System.Action onComplete = null)
     {
         // 1. Viaje a la oscuridad (usamos la nueva función pública)
         yield return StartCoroutine(FadeToBlack(fadeOutDuration));
@@ -64,6 +65,8 @@ public class TeleportManager : MonoBehaviour
 
         // 3. Volver a la luz
         yield return StartCoroutine(FadeToClear(fadeInDuration));
+
+        onComplete?.Invoke();
     }
 
     // =======================================================
@@ -134,10 +137,15 @@ public class TeleportManager : MonoBehaviour
     //  FUNCIÓN PÚBLICA: Permite forzar el viaje desde fuera ---
     public void ForzarTeletransporte(Transform destino)
     {
+        ForzarTeletransporte(destino, null);
+    }
+
+    public void ForzarTeletransporte(Transform destino, System.Action onComplete)
+    {
         if (destino != null)
         {
             // Reutilizamos tu Corrutina maestra que ya tiene el fundido a negro
-            StartCoroutine(TeleportRoutine(destino));
+            StartCoroutine(TeleportRoutine(destino, onComplete));
         }
     }
 

@@ -67,14 +67,19 @@ public class SceneManager : MonoBehaviour
     [Header("Men� de Usuarios (Hasta 5 Opciones)")]
     public List<GameObject> userSelectionOptions;
     [Header("Base de Datos (Nombres)")]
-    private List<string> nombresDeUsuarios = new List<string> { "Ana", "Carles", "Joan", "David", "Elena","A1", "B2", "C3", "D4", "E5","F6" };    private int paginaActualUsuarios = 0;
-    private const int maxNombresPorPagina = 5;    public float distanciaMenuUsuarios = 0.5f;
+    private List<string> nombresDeUsuarios = new List<string>();
+    private List<User> usuariosIndependientes = new List<User>();
+    private readonly List<string> nombresBackupUsuarios = new List<string> { "Ana", "Carles", "Joan", "David", "Elena", "A1", "B2", "C3", "D4", "E5", "F6" };
+    private bool usuariosCargados = false;
+    private bool usuariosCargando = false;
+    private int paginaActualUsuarios = 0;
+    private const int maxNombresPorPagina = 4;    public float distanciaMenuUsuarios = 0.5f;
     public float separacionMenuUsuarios = 30f;
     private List<string> labelsPaginaActual = new List<string>();
     private const int primeraOpcionNombreIndex = 1;
-    private const int ultimaOpcionNombreIndex = 5;
+    private const int ultimaOpcionNombreIndex = 4;
     private const int indexFlechaIzquierda = 0;
-    private const int indexFlechaDerecha = 6;
+    private const int indexFlechaDerecha = 5;
 
     [Header("Referencias de la Escena")]
     public GameObject canvasConexion;
@@ -92,6 +97,8 @@ public class SceneManager : MonoBehaviour
     private List<GameObject> opcionesMenuJugando = new List<GameObject>();
 
     private bool tabletRecienConectada = false;
+    private bool recuperandoSesionMultidispositivo = false;
+    private int ultimoUsuarioMultidispositivoProcesado = -1;
 
     // --- NUEVO: Variable para recordar qu� objeto de tutorial est� activo y poder borrarlo ---
     private GameObject elementoTutorialActivo;
@@ -138,6 +145,19 @@ public class SceneManager : MonoBehaviour
 
     IEnumerator CargarUsuariosIndependent()
     {
+        Debug.Log("[MENU] CargarUsuariosIndependent iniciado.");
+
+        if (usuariosCargando)
+        {
+            Debug.Log("[MENU] Ya habia una carga de usuarios en curso; esperando.");
+            while (usuariosCargando)
+                yield return null;
+
+            yield break;
+        }
+
+        usuariosCargando = true;
+        usuariosCargados = false;
         List<string> usuarios = null;
         string error = null;
 
@@ -145,11 +165,23 @@ public class SceneManager : MonoBehaviour
             users =>
             {
                 usuarios = new List<string>();
-                foreach (var us in users)
+                List<User> usuariosFiltrados = new List<User>();
+                int totalUsuarios = users != null ? users.Length : 0;
+
+                if (users != null)
                 {
-                    if (us != null && us.independent)
-                        usuarios.Add(us.nom);
+                    foreach (var us in users)
+                    {
+                        if (us != null && us.independent && !string.IsNullOrWhiteSpace(us.nom))
+                        {
+                            usuarios.Add(us.nom.Trim());
+                            usuariosFiltrados.Add(us);
+                        }
+                    }
                 }
+
+                usuariosIndependientes = usuariosFiltrados;
+                Debug.Log($"[API] /users devolvio {totalUsuarios} usuarios; independientes validos: {usuarios.Count}.");
             },
             err =>
             {
@@ -160,19 +192,27 @@ public class SceneManager : MonoBehaviour
         if (!string.IsNullOrEmpty(error))
         {
             Debug.LogWarning("[API] No se pudieron cargar los usuarios: " + error);
+            nombresDeUsuarios = new List<string>(nombresBackupUsuarios);
+            usuariosIndependientes.Clear();
+            usuariosCargados = true;
+            Debug.LogWarning("[API] Usando nombres backup: " + string.Join(", ", nombresDeUsuarios));
         }
         else if (usuarios != null)
         {
-            nombresDeUsuarios = usuarios;
+            nombresDeUsuarios = usuarios.Count > 0 ? usuarios : new List<string>(nombresBackupUsuarios);
+            usuariosCargados = true;
             if (usuarios.Count == 0)
             {
                 Debug.LogWarning("[API] No se encontraron usuarios con independent=true.");
+                Debug.LogWarning("[API] Usando nombres backup: " + string.Join(", ", nombresDeUsuarios));
             }
             else
             {
-                Debug.Log($"[API] Cargados {usuarios.Count} usuarios independientes.");
+                Debug.Log($"[API] Cargados {usuarios.Count} usuarios independientes: {string.Join(", ", usuarios)}");
             }
         }
+
+        usuariosCargando = false;
     }
 
     void OnEnable()
@@ -272,7 +312,7 @@ public class SceneManager : MonoBehaviour
                     menuActivator.CloseMenuPublic(0.5f);
                 }
 
-                StartCoroutine(EsperarCierreMenuYIniciarVR());
+                StartCoroutine(EsperarCierreMenuYIniciarVR(nombreSeleccionado));
             }
         }
     }
@@ -356,25 +396,33 @@ public class SceneManager : MonoBehaviour
                     menuActivator.CloseMenuPublic(0.5f);
                 }
 
-                StartCoroutine(EsperarCierreMenuYIniciarVR());
+                StartCoroutine(EsperarCierreMenuYIniciarVR(nombreSeleccionado));
             }
         }
     }
     void OnTabletConnected()
     {
         Debug.Log("�Conexi�n recibida de la tablet! Transicionando a VR...");
+        if (connectionServer != null && connectionServer.connected)
+            connectionServer.Send("REQ_USER");
+
+        ultimoUsuarioMultidispositivoProcesado = -1;
         tabletRecienConectada = true;
     }
 
-    IEnumerator EsperarCierreMenuYIniciarVR()
+    IEnumerator EsperarCierreMenuYIniciarVR(string nombreUsuario = null)
     {
         yield return new WaitForSeconds(1.4f);
-        IniciarExperienciaVR();
+        yield return StartCoroutine(IniciarExperienciaVRParaUsuarioIndependiente(nombreUsuario));
     }
 
     IEnumerator TransicionAlMenuUsuarios()
     {
+        Debug.Log("[MENU] TransicionAlMenuUsuarios: recargando usuarios desde API.");
         yield return new WaitForSeconds(0.6f);
+
+        yield return StartCoroutine(CargarUsuariosIndependent());
+
         MostrarPaginaUsuarios(0);
     }
 
@@ -382,57 +430,65 @@ public class SceneManager : MonoBehaviour
     // FASE VR COMPLETA (CON FUNDIDO)
     // ==========================================
 
-    void MostrarPaginaUsuarios(int numeroPagina)
+    void MostrarPaginaUsuarios(int indiceDeInicio)
     {
         if (menuActivator == null || userSelectionOptions == null || userSelectionOptions.Count < 7)
         {
-            Debug.LogError("[MENÚ] Necesitas exactamente 7 elementos en userSelectionOptions");
+            Debug.LogError("[MENU] No se puede mostrar usuarios: revisa menuActivator y que userSelectionOptions tenga 7 prefabs.");
             return;
         }
-        Debug.Log($"[MENÚ] MostrarPaginaUsuarios() recibido={numeroPagina}");
-        int nombresPorPagina = maxNombresPorPagina; // 5
+
         int totalNombres = nombresDeUsuarios.Count;
-        int totalPaginas = Mathf.Max(1, Mathf.CeilToInt((float)totalNombres / nombresPorPagina));
-
-        numeroPagina = Mathf.Clamp(numeroPagina, 0, totalPaginas - 1);
-        paginaActualUsuarios = numeroPagina;
-        
-        int inicio = numeroPagina * nombresPorPagina;
-        Debug.Log($"[MENÚ] Página final={numeroPagina}, totalPaginas={totalPaginas}, inicio={inicio}");
-
-        labelsPaginaActual.Clear();
-
-        // Siempre 7 labels lógicos
-        labelsPaginaActual.Add("<-");
-
-        for (int i = 0; i < nombresPorPagina; i++)
+        Debug.Log($"[MENU] MostrarPaginaUsuarios con {totalNombres} nombres.");
+        if (totalNombres == 0)
         {
-            int nameIndex = inicio + i;
-            if (nameIndex < totalNombres)
-                labelsPaginaActual.Add(nombresDeUsuarios[nameIndex]);
-            else
-                labelsPaginaActual.Add("");
+            Debug.LogWarning("[MENU] No hay usuarios independientes cargados para mostrar. Revisa la conexion con la API y el campo independent en la BD.");
+            return;
         }
 
-        labelsPaginaActual.Add("->");
-        Debug.Log($"[MENÚ] Labels página: {string.Join(" | ", labelsPaginaActual)}");
-        // Siempre 7 prefabs fijos, en este orden lógico
-        List<GameObject> opcionesActivas = new List<GameObject>
-        {
-            userSelectionOptions[0], // flecha izquierda
-            userSelectionOptions[1], // nombre 1
-            userSelectionOptions[2], // nombre 2
-            userSelectionOptions[3], // nombre 3
-            userSelectionOptions[4], // nombre 4
-            userSelectionOptions[5], // nombre 5
-            userSelectionOptions[6]  // flecha derecha
-        };
+        int mostrarCuantos = 4; // Siempre queremos 4 si hay suficientes
+        bool necesitaPaginacion = totalNombres > mostrarCuantos;
 
+        // Aseguramos que el índice sea circular (si es -1 pasa al último, si supera el total vuelve a 0)
+        if (totalNombres > 0)
+        {
+            paginaActualUsuarios = (indiceDeInicio + totalNombres) % totalNombres;
+        }
+
+        labelsPaginaActual.Clear();
+        List<GameObject> opcionesActivas = new List<GameObject>();
+
+        // 1. Flecha Izquierda (Retrocede 1 posición)
+        if (necesitaPaginacion)
+        {
+            labelsPaginaActual.Add("<-");
+            opcionesActivas.Add(userSelectionOptions[0]);
+        }
+
+        // 2. Nombres (Ciclo circular)
+        // Si hay menos de 4, mostramos los que hay. Si hay 4 o más, mostramos 4.
+        int limite = Mathf.Min(mostrarCuantos, totalNombres);
+        
+        for (int i = 0; i < limite; i++)
+        {
+            // La magia del módulo: (inicio + i) % total
+            int realIndex = (paginaActualUsuarios + i) % totalNombres;
+            
+            labelsPaginaActual.Add(nombresDeUsuarios[realIndex]);
+            opcionesActivas.Add(userSelectionOptions[i + 1]);
+        }
+
+        // 3. Flecha Derecha (Avanza 1 posición)
+        if (necesitaPaginacion)
+        {
+            labelsPaginaActual.Add("->");
+            opcionesActivas.Add(userSelectionOptions[5]);
+        }
+
+        // Configuración y apertura
         menuActivator.isLockedOpen = true;
         menuActivator.distancia = distanciaMenuUsuarios;
-
-        if (menuActivator.fanMenu != null)
-            menuActivator.fanMenu.spacingAngle = separacionMenuUsuarios;
+        if (menuActivator.fanMenu != null) menuActivator.fanMenu.spacingAngle = separacionMenuUsuarios;
 
         menuActivator.CloseMenuPublic(0f);
         menuActivator.OpenMenu(opcionesActivas, true);
@@ -465,6 +521,7 @@ public class SceneManager : MonoBehaviour
         // Lo importante: usar optionIndex, no el orden visual del transform
         foreach (FanOption option in options)
         {
+            option.gameObject.SetActive(true);
             int logicalIndex = option.optionIndex;
 
             if (logicalIndex < 0 || logicalIndex >= labelsPaginaActual.Count)
@@ -473,7 +530,7 @@ public class SceneManager : MonoBehaviour
                 continue;
             }
 
-            TMPro.TMP_Text texto = option.GetComponentInChildren<TMPro.TMP_Text>();
+            TMPro.TMP_Text texto = option.GetComponentInChildren<TMPro.TMP_Text>(true);
             if (texto == null)
             {
                 Debug.LogError($"[MENÚ] Botón con optionIndex={logicalIndex} sin TMP_Text");
@@ -490,6 +547,132 @@ public class SceneManager : MonoBehaviour
         faseActual = FaseApp.Jugando;
         // Lanzamos la corrutina que hace el efecto visual
         StartCoroutine(RutinaTransicionVR());
+    }
+
+    IEnumerator IniciarExperienciaVRParaUsuarioIndependiente(string nombreUsuario)
+    {
+        User usuario = BuscarUsuarioIndependiente(nombreUsuario);
+        if (usuario == null || usuario.id_usuari <= 0)
+        {
+            IniciarExperienciaVR();
+            yield break;
+        }
+
+        UserAPI.LastSessionResponse ultimaSesion = null;
+        string error = null;
+
+        yield return StartCoroutine(UserAPI.GetLastSession(
+            usuario.id_usuari,
+            session => ultimaSesion = session,
+            err => error = err
+        ));
+
+        if (!string.IsNullOrEmpty(error))
+        {
+            Debug.LogWarning("No se pudo cargar la ultima sesion del usuario independiente: " + error);
+            IniciarExperienciaVR();
+            yield break;
+        }
+
+        AplicarConfiguracionUltimaSesion(ultimaSesion);
+
+        List<string> ids = ExtraerIdsVrUltimaSesion(ultimaSesion);
+        if (ids.Count > 0)
+            RecibirDatosDeLaTablet(ids);
+
+        IniciarExperienciaVR();
+    }
+
+    IEnumerator IniciarExperienciaVRMultidispositivoDesdeUltimaSesion(int userId)
+    {
+        if (recuperandoSesionMultidispositivo)
+            yield break;
+
+        recuperandoSesionMultidispositivo = true;
+
+        UserAPI.LastSessionResponse ultimaSesion = null;
+        string error = null;
+
+        yield return StartCoroutine(UserAPI.GetLastSession(
+            userId,
+            session => ultimaSesion = session,
+            err => error = err
+        ));
+
+        if (!string.IsNullOrEmpty(error))
+        {
+            Debug.LogWarning("[MULTI] No se pudo cargar la ultima sesion del usuario multidispositivo: " + error);
+            recuperandoSesionMultidispositivo = false;
+            yield break;
+        }
+
+        List<string> ids = ExtraerIdsVrUltimaSesion(ultimaSesion);
+        if (ultimaSesion == null || ids.Count == 0)
+        {
+            Debug.Log("[MULTI] Sin ultima sesion VR recuperable. Se mantiene el flujo normal Tutorial -> Preparacion -> VR.");
+            recuperandoSesionMultidispositivo = false;
+            yield break;
+        }
+
+        Debug.Log($"[MULTI] Ultima sesion recuperada para usuario {userId}. Elementos VR: {string.Join(",", ids)}");
+        AplicarConfiguracionUltimaSesion(ultimaSesion);
+        RecibirDatosDeLaTablet(ids);
+
+        recuperandoSesionMultidispositivo = false;
+        IniciarExperienciaVR();
+    }
+
+    User BuscarUsuarioIndependiente(string nombreUsuario)
+    {
+        if (string.IsNullOrEmpty(nombreUsuario))
+            return null;
+
+        foreach (User usuario in usuariosIndependientes)
+        {
+            if (usuario != null && usuario.nom == nombreUsuario)
+                return usuario;
+        }
+
+        return null;
+    }
+
+    void AplicarConfiguracionUltimaSesion(UserAPI.LastSessionResponse session)
+    {
+        if (session == null)
+            return;
+
+        string postura = !string.IsNullOrEmpty(session.postura_actual)
+            ? session.postura_actual
+            : (!string.IsNullOrEmpty(session.postura_final) ? session.postura_final : session.postura_inicial);
+
+        usuarioSentado = postura == "SENTADO";
+        permisoMenuVRTerapeuta = session.menu_mans_actiu;
+        permisoParticulasTerapeuta = session.particules_mans_actives;
+
+        if (particulasManoIzquierda != null) particulasManoIzquierda.SetActive(permisoParticulasTerapeuta);
+        if (particulasManoDerecha != null) particulasManoDerecha.SetActive(permisoParticulasTerapeuta);
+    }
+
+    List<string> ExtraerIdsVrUltimaSesion(UserAPI.LastSessionResponse session)
+    {
+        List<string> ids = new List<string>();
+        if (session == null || session.vr_elements == null)
+            return ids;
+
+        List<UserAPI.LastSessionElement> elementos = new List<UserAPI.LastSessionElement>(session.vr_elements);
+        elementos.Sort((a, b) => a.numero_posicio.CompareTo(b.numero_posicio));
+
+        foreach (var elemento in elementos)
+        {
+            if (elemento != null && !string.IsNullOrEmpty(elemento.id_element) && !ids.Contains(elemento.id_element))
+            {
+                ids.Add(elemento.id_element);
+                if (ids.Count >= 6)
+                    break;
+            }
+        }
+
+        return ids;
     }
 
     IEnumerator RutinaTransicionVR()
@@ -560,7 +743,6 @@ public class SceneManager : MonoBehaviour
             if (canvasConexion != null) canvasConexion.SetActive(false);
             if (lanDiscovery != null) lanDiscovery.StopBroadcast();
 
-            // Al conectar, entramos en modo TUTORIAL (Passthrough)
             ProcesarCambioAPassthrough(FaseApp.Tutorial);
         }
 
@@ -588,6 +770,25 @@ public class SceneManager : MonoBehaviour
                     ProcesarCambioAPassthrough(FaseApp.Jugando);
                     continue;
                 }
+                else if (mensajeRecibido.StartsWith("USER:"))
+                {
+                    string rawUserId = mensajeRecibido.Split(':')[1];
+                    if (int.TryParse(rawUserId, out int userId) && userId > 0)
+                    {
+                        if (userId == ultimoUsuarioMultidispositivoProcesado)
+                            continue;
+
+                        ultimoUsuarioMultidispositivoProcesado = userId;
+                        Debug.Log("[MULTI] Usuario recibido desde tablet: " + userId);
+                        StartCoroutine(IniciarExperienciaVRMultidispositivoDesdeUltimaSesion(userId));
+                    }
+                    else
+                    {
+                        Debug.LogWarning("[MULTI] USER recibido con id invalido: " + mensajeRecibido);
+                    }
+
+                    continue;
+                }
 
                 // --- COMANDOS CON DATOS ---
                 if (mensajeRecibido.StartsWith("TUTORIAL:"))
@@ -612,7 +813,13 @@ public class SceneManager : MonoBehaviour
                         Transform destino = mapaDeTeleports[idColor];
                         if (teleportManager != null)
                         {
-                            teleportManager.ForzarTeletransporte(destino);
+                            teleportManager.ForzarTeletransporte(destino, () =>
+                            {
+                                if (connectionServer != null && connectionServer.connected)
+                                {
+                                    connectionServer.Send("UBICACION:" + idColor);
+                                }
+                            });
                         }
                     }
                 }
@@ -748,10 +955,13 @@ public class SceneManager : MonoBehaviour
             // --- NUEVO: Chivatazo a la tablet (Modo Tutorial) ---
             if (connectionServer != null && connectionServer.connected)
             {
-                string px = posicionAparicion.x.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
-                string py = posicionAparicion.y.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
-                string pz = posicionAparicion.z.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
-                string ry = elementoTutorialActivo.transform.eulerAngles.y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+                Transform transformTutorial = elementoTutorialActivo.transform;
+                Vector3 posicionReal = transformTutorial.position;
+
+                string px = posicionReal.x.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
+                string py = posicionReal.y.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
+                string pz = posicionReal.z.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
+                string ry = transformTutorial.eulerAngles.y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
 
                 connectionServer.Send($"SYNC_TUT:{idTablet}|{px},{py},{pz}|{ry}");
             }
@@ -846,10 +1056,13 @@ public class SceneManager : MonoBehaviour
                 objetosGeneradosEnSala.Add(nuevoObjetoSala);
 
                 // --- NUEVO: A�adimos este objeto al paquete de datos ---
-                string px = puntoElegido.puntoAparicion.position.x.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
-                string py = puntoElegido.puntoAparicion.position.y.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
-                string pz = puntoElegido.puntoAparicion.position.z.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
-                string ry = puntoElegido.puntoAparicion.eulerAngles.y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+                Transform transformReal = nuevoObjetoSala.transform;
+                Vector3 posicionReal = transformReal.position;
+
+                string px = posicionReal.x.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
+                string py = posicionReal.y.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
+                string pz = posicionReal.z.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
+                string ry = transformReal.eulerAngles.y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
 
                 paqueteSync += $"{idTablet}|{px},{py},{pz}|{ry};";
 
