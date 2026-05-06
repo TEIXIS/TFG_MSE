@@ -5726,7 +5726,7 @@ MonoBehaviour:
   - {fileID: 3131395570391417839, guid: d19057b2683af6446bb21b360bfc69c9, type: 3}
   - {fileID: 3131395570391417839, guid: d19057b2683af6446bb21b360bfc69c9, type: 3}
   distanciaMenuUsuarios: 0.5
-  separacionMenuUsuarios: 30
+  separacionMenuUsuarios: 22
   canvasConexion: {fileID: 1792736737}
   salaMultisensorial: {fileID: 1380842775}
   baseDatosElementos:

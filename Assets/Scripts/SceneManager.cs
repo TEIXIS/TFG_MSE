@@ -73,8 +73,9 @@ public class SceneManager : MonoBehaviour
     private bool usuariosCargados = false;
     private bool usuariosCargando = false;
     private int paginaActualUsuarios = 0;
-    private const int maxNombresPorPagina = 4;    public float distanciaMenuUsuarios = 0.5f;
-    public float separacionMenuUsuarios = 30f;
+    private const int maxNombresPorPagina = 4;
+    public float distanciaMenuUsuarios = 0.5f;
+    public float separacionMenuUsuarios = 22f;
     private List<string> labelsPaginaActual = new List<string>();
     private const int primeraOpcionNombreIndex = 1;
     private const int ultimaOpcionNombreIndex = 4;
@@ -290,13 +291,13 @@ public class SceneManager : MonoBehaviour
 
             if (label == "<-")
             {
-                MostrarPaginaUsuarios(paginaActualUsuarios - 1);
+                MostrarPaginaUsuarios(paginaActualUsuarios - maxNombresPorPagina);
                 return;
             }
 
             if (label == "->")
             {
-                MostrarPaginaUsuarios(paginaActualUsuarios + 1);
+                MostrarPaginaUsuarios(paginaActualUsuarios + maxNombresPorPagina);
                 return;
             }
 
@@ -374,13 +375,13 @@ public class SceneManager : MonoBehaviour
 
             if (index == indexFlechaIzquierda)
             {
-                MostrarPaginaUsuarios(paginaActualUsuarios - 1);
+                MostrarPaginaUsuarios(paginaActualUsuarios - maxNombresPorPagina);
                 return;
             }
 
             if (index == indexFlechaDerecha)
             {
-                MostrarPaginaUsuarios(paginaActualUsuarios + 1);
+                MostrarPaginaUsuarios(paginaActualUsuarios + maxNombresPorPagina);
                 return;
             }
 
@@ -446,7 +447,7 @@ public class SceneManager : MonoBehaviour
             return;
         }
 
-        int mostrarCuantos = 4; // Siempre queremos 4 si hay suficientes
+        int mostrarCuantos = maxNombresPorPagina; // Siempre queremos 4 si hay suficientes
         bool necesitaPaginacion = totalNombres > mostrarCuantos;
 
         // Aseguramos que el índice sea circular (si es -1 pasa al último, si supera el total vuelve a 0)
