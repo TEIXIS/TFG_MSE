@@ -29,6 +29,10 @@ public struct PuntoSala
 
 public class SceneManager : MonoBehaviour
 {
+    private const string RoomWhite = "blanca";
+    private const string RoomAdult = "adult";
+    private const string RoomChild = "infantil";
+
     public enum FaseApp { MenuInicial, SeleccionandoUsuario, EsperandoConexion, Tutorial, Jugando }
     private FaseApp faseActual = FaseApp.MenuInicial;
 
@@ -85,6 +89,13 @@ public class SceneManager : MonoBehaviour
     [Header("Referencias de la Escena")]
     public GameObject canvasConexion;
     public GameObject salaMultisensorial;
+    [Header("Tipos de Sala")]
+    [Tooltip("Sala blanca. Si se deja vacio, se intentara buscar un GameObject llamado HabBlanca.")]
+    public GameObject habBlanca;
+    [Tooltip("Sala adulta. Si se deja vacio, se intentara buscar un GameObject llamado HabAdult.")]
+    public GameObject habAdult;
+    [Tooltip("Sala infantil. Si se deja vacio, se intentara buscar un GameObject llamado HabInfantil.")]
+    public GameObject habInfantil;
    // public GameObject elements;
    // public GameObject jumpingpoints;
 
@@ -92,10 +103,14 @@ public class SceneManager : MonoBehaviour
     public List<ElementoVR> baseDatosElementos;
 
     [Header("Puntos de Aparici�n y Teletransporte (Sala)")]
+    [Tooltip("Se usan en orden fijo. Los 6 primeros son las posiciones disponibles para objetos en VR.")]
     public List<PuntoSala> puntosDeAparicion;
 
     private List<GameObject> objetosGeneradosEnSala = new List<GameObject>();
     private List<GameObject> opcionesMenuJugando = new List<GameObject>();
+    private readonly Dictionary<string, GameObject> objetosGeneradosPorId = new Dictionary<string, GameObject>();
+    private readonly Dictionary<string, PuntoSala> puntosAsignadosPorId = new Dictionary<string, PuntoSala>();
+    private string tipoSalaActual = RoomWhite;
 
     private bool tabletRecienConectada = false;
     private bool recuperandoSesionMultidispositivo = false;
@@ -114,8 +129,11 @@ public class SceneManager : MonoBehaviour
 
     IEnumerator Start()
     {
+        ResolverReferenciasSalas();
+        AplicarTipoSala(tipoSalaActual, false);
+
         if (passthroughLayer != null) passthroughLayer.hidden = false;
-        if (salaMultisensorial != null) salaMultisensorial.SetActive(false);
+        SetSalaActiva(false);
 
         if (connectionServer != null)
         {
@@ -142,6 +160,88 @@ public class SceneManager : MonoBehaviour
         // L�neas de prueba: simula que la tablet env�a datos
       //  List<string> coloresDePrueba = new List<string> { "blau_cel", "groc", "rosa","verd","taronja","blau_fosc" };
       //  RecibirDatosDeLaTablet(coloresDePrueba);
+    }
+
+    void ResolverReferenciasSalas()
+    {
+        if (habBlanca == null)
+            habBlanca = GameObject.Find("HabBlanca");
+
+        if (habAdult == null)
+            habAdult = GameObject.Find("HabAdult");
+
+        if (habInfantil == null)
+            habInfantil = GameObject.Find("HabInfantil");
+
+        if (salaMultisensorial == null)
+            salaMultisensorial = habBlanca != null ? habBlanca : (habAdult != null ? habAdult : habInfantil);
+    }
+
+    void AplicarTipoSala(string tipoSala, bool mantenerActiva)
+    {
+        tipoSalaActual = NormalizarTipoSala(tipoSala);
+
+        GameObject salaAnterior = salaMultisensorial;
+        salaMultisensorial = ObtenerSalaPorTipo(tipoSalaActual);
+        bool debeQuedarActiva = mantenerActiva && salaAnterior != null && salaAnterior.activeSelf;
+
+        if (habBlanca != null) habBlanca.SetActive(false);
+        if (habAdult != null) habAdult.SetActive(false);
+        if (habInfantil != null) habInfantil.SetActive(false);
+
+        SetSalaActiva(debeQuedarActiva);
+        if (debeQuedarActiva)
+            ReparentObjetosGeneradosASalaActiva();
+
+        Debug.Log("[SALA] Tipo de sala aplicado: " + tipoSalaActual);
+    }
+
+    string NormalizarTipoSala(string tipoSala)
+    {
+        string valor = (tipoSala ?? "").Trim().ToLowerInvariant();
+
+        if (valor == RoomAdult || valor.Contains("adult"))
+            return RoomAdult;
+
+        if (valor == RoomChild || valor.Contains("infant"))
+            return RoomChild;
+
+        return RoomWhite;
+    }
+
+    GameObject ObtenerSalaPorTipo(string tipoSala)
+    {
+        if (tipoSala == RoomAdult && habAdult != null)
+            return habAdult;
+
+        if (tipoSala == RoomChild && habInfantil != null)
+            return habInfantil;
+
+        if (habBlanca != null)
+            return habBlanca;
+
+        if (salaMultisensorial != null)
+            return salaMultisensorial;
+
+        return habAdult != null ? habAdult : habInfantil;
+    }
+
+    void SetSalaActiva(bool activa)
+    {
+        if (salaMultisensorial != null)
+            salaMultisensorial.SetActive(activa);
+    }
+
+    void ReparentObjetosGeneradosASalaActiva()
+    {
+        if (salaMultisensorial == null)
+            return;
+
+        foreach (GameObject obj in objetosGeneradosPorId.Values)
+        {
+            if (obj != null)
+                obj.transform.SetParent(salaMultisensorial.transform, true);
+        }
     }
 
     IEnumerator CargarUsuariosIndependent()
@@ -559,6 +659,8 @@ public class SceneManager : MonoBehaviour
             yield break;
         }
 
+        AplicarTipoSala(GetTipoSalaUsuario(usuario), false);
+
         UserAPI.LastSessionResponse ultimaSesion = null;
         string error = null;
 
@@ -637,6 +739,17 @@ public class SceneManager : MonoBehaviour
         return null;
     }
 
+    string GetTipoSalaUsuario(User usuario)
+    {
+        if (usuario == null)
+            return RoomWhite;
+
+        if (!string.IsNullOrEmpty(usuario.tipus_sala))
+            return usuario.tipus_sala;
+
+        return usuario.entorn_adult ? RoomAdult : RoomChild;
+    }
+
     void AplicarConfiguracionUltimaSesion(UserAPI.LastSessionResponse session)
     {
         if (session == null)
@@ -684,7 +797,7 @@ public class SceneManager : MonoBehaviour
 
         // 2. En la oscuridad, damos el cambiazo (Apagamos realidad, encendemos VR)
         if (passthroughLayer != null) passthroughLayer.hidden = true;
-        if (salaMultisensorial != null) salaMultisensorial.SetActive(true);
+        SetSalaActiva(true);
 
         if (menuActivator != null)
         {
@@ -721,7 +834,7 @@ public class SceneManager : MonoBehaviour
             yield return StartCoroutine(teleportManager.FadeToBlack(0.4f));
 
         // 2. En la oscuridad, apagamos la sala virtual y activamos las c�maras reales
-        if (salaMultisensorial != null) salaMultisensorial.SetActive(false);
+        SetSalaActiva(false);
         if (passthroughLayer != null) passthroughLayer.hidden = false;
 
         // Bloqueamos el men� por seguridad
@@ -788,6 +901,12 @@ public class SceneManager : MonoBehaviour
                         Debug.LogWarning("[MULTI] USER recibido con id invalido: " + mensajeRecibido);
                     }
 
+                    continue;
+                }
+                else if (mensajeRecibido.StartsWith("ROOM:"))
+                {
+                    string tipoSala = mensajeRecibido.Substring("ROOM:".Length);
+                    AplicarTipoSala(tipoSala, faseActual == FaseApp.Jugando);
                     continue;
                 }
 
@@ -895,7 +1014,7 @@ public class SceneManager : MonoBehaviour
             if (elementoTutorialActivo != null) Destroy(elementoTutorialActivo);
 
             // Nos aseguramos de que el entorno VR est� apagado y las c�maras encendidas
-            if (salaMultisensorial != null) salaMultisensorial.SetActive(false);
+            SetSalaActiva(false);
             if (passthroughLayer != null) passthroughLayer.hidden = false;
             if (menuActivator != null) menuActivator.canOpenWithPalms = false;
         }
@@ -912,7 +1031,7 @@ public class SceneManager : MonoBehaviour
         faseActual = nuevaFase;
         if (elementoTutorialActivo != null) Destroy(elementoTutorialActivo);
 
-        if (salaMultisensorial != null) salaMultisensorial.SetActive(false);
+        SetSalaActiva(false);
         if (passthroughLayer != null) passthroughLayer.hidden = false;
         if (menuActivator != null) menuActivator.canOpenWithPalms = false;
 
@@ -977,111 +1096,175 @@ public class SceneManager : MonoBehaviour
     // ==========================================
     public void RecibirDatosDeLaTablet(List<string> elementosSeleccionadosTablet)
     {
-        string paqueteSync = "SYNC:"; // Empezamos a preparar el paquete
+        RecibirDatosDeLaTabletConPosicionesFijas(elementosSeleccionadosTablet);
+        return;
+    }
 
-        mapaDeTeleports.Clear();
-        idsOrdenadosParaTeleport.Clear();
-        // Si hab�a un elemento del tutorial flotando por ah�, lo destruimos
-        if (elementoTutorialActivo != null) Destroy(elementoTutorialActivo);
+    void RecibirDatosDeLaTabletConPosicionesFijas(List<string> elementosSeleccionadosTablet)
+    {
+        if (elementosSeleccionadosTablet == null)
+            elementosSeleccionadosTablet = new List<string>();
 
-        foreach (GameObject obj in objetosGeneradosEnSala) { Destroy(obj); }
-        objetosGeneradosEnSala.Clear();
-        opcionesMenuJugando.Clear();
+        List<string> idsSeleccionados = NormalizarListaElementos(elementosSeleccionadosTablet);
 
-        List<Transform> destinosTeleportActivos = new List<Transform>();
-        // List<PuntoSala> posicionesDisponibles = new List<PuntoSala>(puntosDeAparicion);
+        if (elementoTutorialActivo != null)
+            Destroy(elementoTutorialActivo);
 
-        // --- NUEVA L�GICA DE APARICI�N (Sentado vs De Pie) ---
-        List<PuntoSala> posicionesDisponibles = new List<PuntoSala>();
-        List<PuntoSala> puntosTraserosReserva = new List<PuntoSala>();
+        EliminarObjetosNoSeleccionados(idsSeleccionados);
+        CrearObjetosNuevosEnPuntosFijos(idsSeleccionados);
+        ReconstruirEstadoVr(idsSeleccionados);
+    }
 
-        if (usuarioSentado)
+    List<string> NormalizarListaElementos(List<string> elementosSeleccionadosTablet)
+    {
+        List<string> ids = new List<string>();
+
+        foreach (string id in elementosSeleccionadosTablet)
         {
-            // SOLUCI�N: Usamos el FRENTE ABSOLUTO de la sala virtual en lugar de la cabeza.
-            // As� no importa si el usuario est� mirando al suelo o girado al iniciar.
-            Vector3 frenteHabitacion = salaMultisensorial != null ? salaMultisensorial.transform.forward : Vector3.forward;
-            frenteHabitacion.y = 0;
-            frenteHabitacion.Normalize();
+            if (string.IsNullOrWhiteSpace(id) || ids.Contains(id))
+                continue;
 
-            // Usamos el centro exacto de la sala como punto de referencia
-            Vector3 centroHabitacion = salaMultisensorial != null ? salaMultisensorial.transform.position : Vector3.zero;
-            centroHabitacion.y = 0;
+            ids.Add(id.Trim());
 
-            foreach (var punto in puntosDeAparicion)
+            if (ids.Count >= 6)
+                break;
+        }
+
+        return ids;
+    }
+
+    void EliminarObjetosNoSeleccionados(List<string> idsSeleccionados)
+    {
+        List<string> idsAEliminar = new List<string>();
+
+        foreach (var kv in objetosGeneradosPorId)
+        {
+            if (!idsSeleccionados.Contains(kv.Key))
+                idsAEliminar.Add(kv.Key);
+        }
+
+        foreach (string id in idsAEliminar)
+        {
+            if (objetosGeneradosPorId.TryGetValue(id, out GameObject obj) && obj != null)
             {
-                Vector3 posicionPunto = punto.puntoAparicion.position;
-                posicionPunto.y = 0;
-
-                Vector3 direccionAlPunto = (posicionPunto - centroHabitacion).normalized;
-
-                if (Vector3.Angle(frenteHabitacion, direccionAlPunto) <= 90f)
-                {
-                    posicionesDisponibles.Add(punto);
-                }
-                else
-                {
-                    puntosTraserosReserva.Add(punto);
-                }
+                objetosGeneradosEnSala.Remove(obj);
+                Destroy(obj);
             }
 
-            // --- CHIVATO VITAL PARA TI ---
-            Debug.Log($"[SPAWN SENTADO] Puntos Frontales encontrados: {posicionesDisponibles.Count} | Puntos Traseros: {puntosTraserosReserva.Count}");
+            objetosGeneradosPorId.Remove(id);
+            puntosAsignadosPorId.Remove(id);
+            mapaDeTeleports.Remove(id);
         }
-        else
-        {
-            posicionesDisponibles.AddRange(puntosDeAparicion);
-        }
+    }
 
-
-        foreach (string idTablet in elementosSeleccionadosTablet)
+    void CrearObjetosNuevosEnPuntosFijos(List<string> idsSeleccionados)
+    {
+        foreach (string idTablet in idsSeleccionados)
         {
+            if (objetosGeneradosPorId.ContainsKey(idTablet))
+                continue;
+
             ElementoVR elemento = baseDatosElementos.Find(e => e.idElemento == idTablet);
+            if (elemento.prefabHabitacion == null)
+                continue;
 
-            // Si nos hemos quedado sin puntos frontales, tiramos de los traseros de emergencia
-            if (posicionesDisponibles.Count == 0 && usuarioSentado && puntosTraserosReserva.Count > 0)
+            if (!TryGetSiguientePuntoLibre(out PuntoSala puntoElegido))
             {
-                posicionesDisponibles.AddRange(puntosTraserosReserva);
-                puntosTraserosReserva.Clear();
-                Debug.LogWarning("Se agotaron los puntos frontales. Usando puntos traseros por seguridad.");
+                Debug.LogWarning("No quedan puntos libres para colocar el elemento: " + idTablet);
+                continue;
             }
 
-            if (elemento.idElemento == idTablet && posicionesDisponibles.Count > 0)
+            Transform parentTransform = salaMultisensorial != null ? salaMultisensorial.transform : null;
+            GameObject nuevoObjetoSala = Instantiate(elemento.prefabHabitacion, puntoElegido.puntoAparicion.position, puntoElegido.puntoAparicion.rotation, parentTransform);
+
+            objetosGeneradosEnSala.Add(nuevoObjetoSala);
+            objetosGeneradosPorId[idTablet] = nuevoObjetoSala;
+            puntosAsignadosPorId[idTablet] = puntoElegido;
+            mapaDeTeleports[idTablet] = puntoElegido.puntoTeletransporte;
+        }
+    }
+
+    bool TryGetSiguientePuntoLibre(out PuntoSala puntoLibre)
+    {
+        int limite = Mathf.Min(6, puntosDeAparicion.Count);
+
+        for (int i = 0; i < limite; i++)
+        {
+            PuntoSala punto = puntosDeAparicion[i];
+            if (punto.puntoAparicion == null)
+                continue;
+
+            bool usado = false;
+            foreach (var asignado in puntosAsignadosPorId.Values)
             {
-                int indiceAleatorio = UnityEngine.Random.Range(0, posicionesDisponibles.Count);
-                PuntoSala puntoElegido = posicionesDisponibles[indiceAleatorio];
-                posicionesDisponibles.RemoveAt(indiceAleatorio);
+                if (asignado.puntoAparicion == punto.puntoAparicion)
+                {
+                    usado = true;
+                    break;
+                }
+            }
 
-                Transform parentTransform = salaMultisensorial != null ? salaMultisensorial.transform : null;
-                GameObject nuevoObjetoSala = Instantiate(elemento.prefabHabitacion, puntoElegido.puntoAparicion.position, puntoElegido.puntoAparicion.rotation, parentTransform);
+            if (!usado)
+            {
+                puntoLibre = punto;
+                return true;
+            }
+        }
 
-                objetosGeneradosEnSala.Add(nuevoObjetoSala);
+        puntoLibre = default;
+        return false;
+    }
 
-                // --- NUEVO: A�adimos este objeto al paquete de datos ---
-                Transform transformReal = nuevoObjetoSala.transform;
-                Vector3 posicionReal = transformReal.position;
+    void ReconstruirEstadoVr(List<string> idsSeleccionados)
+    {
+        string paqueteSync = "SYNC:";
+        opcionesMenuJugando.Clear();
+        idsOrdenadosParaTeleport.Clear();
+        mapaDeTeleports.Clear();
+        List<Transform> destinosTeleportActivos = new List<Transform>();
 
-                string px = posicionReal.x.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
-                string py = posicionReal.y.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
-                string pz = posicionReal.z.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
-                string ry = transformReal.eulerAngles.y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+        foreach (string idTablet in idsSeleccionados)
+        {
+            if (!objetosGeneradosPorId.TryGetValue(idTablet, out GameObject objetoSala) || objetoSala == null)
+                continue;
 
-                paqueteSync += $"{idTablet}|{px},{py},{pz}|{ry};";
-
-
+            ElementoVR elemento = baseDatosElementos.Find(e => e.idElemento == idTablet);
+            if (elemento.prefabMenuMano != null)
                 opcionesMenuJugando.Add(elemento.prefabMenuMano);
-                destinosTeleportActivos.Add(puntoElegido.puntoTeletransporte);
-                //  Guardamos en el diccionario el ID y su coordenada
-                mapaDeTeleports[idTablet] = puntoElegido.puntoTeletransporte;
+
+            if (puntosAsignadosPorId.TryGetValue(idTablet, out PuntoSala punto))
+            {
+                destinosTeleportActivos.Add(punto.puntoTeletransporte);
+                mapaDeTeleports[idTablet] = punto.puntoTeletransporte;
                 idsOrdenadosParaTeleport.Add(idTablet);
             }
+
+            paqueteSync += CrearEntradaSync(idTablet, objetoSala.transform) + ";";
         }
 
-        // --- NUEVO: Enviamos el mapa completo a la tablet ---
-        if (paqueteSync.EndsWith(";")) paqueteSync = paqueteSync.Substring(0, paqueteSync.Length - 1); // Quitamos el �ltimo punto y coma
-        if (connectionServer != null && connectionServer.connected) connectionServer.Send(paqueteSync);
+        if (paqueteSync.EndsWith(";"))
+            paqueteSync = paqueteSync.Substring(0, paqueteSync.Length - 1);
 
-        if (menuActivator != null) menuActivator.opcionesDePartida = opcionesMenuJugando;
-        if (teleportManager != null) teleportManager.teleportDestinations = destinosTeleportActivos.ToArray();
+        if (connectionServer != null && connectionServer.connected)
+            connectionServer.Send(paqueteSync);
+
+        if (menuActivator != null)
+            menuActivator.opcionesDePartida = opcionesMenuJugando;
+
+        if (teleportManager != null)
+            teleportManager.teleportDestinations = destinosTeleportActivos.ToArray();
+    }
+
+    string CrearEntradaSync(string idTablet, Transform transformReal)
+    {
+        Vector3 posicionReal = transformReal.position;
+
+        string px = posicionReal.x.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
+        string py = posicionReal.y.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
+        string pz = posicionReal.z.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
+        string ry = transformReal.eulerAngles.y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+
+        return $"{idTablet}|{px},{py},{pz}|{ry}";
     }
 
    

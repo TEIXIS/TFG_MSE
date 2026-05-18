@@ -6,6 +6,9 @@ public class User
     public int id_usuari;
     public string nom;
 
+    public string tipus_sala;
+    public string postura_inicial;
+
     public bool independent;
     public bool entorn_adult;
 
