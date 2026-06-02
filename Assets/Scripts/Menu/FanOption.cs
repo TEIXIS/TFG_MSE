@@ -36,6 +36,8 @@ public class FanOption : MonoBehaviour
 
     Vector3 targetLocalPos;
     Vector3 baseScale;
+    Vector3 interactionLocalCenter;
+    Collider interactionCollider;
     Renderer rend;
     MaterialPropertyBlock mpb;
 
@@ -84,6 +86,7 @@ public class FanOption : MonoBehaviour
     public AudioClip pressSound;
     private AudioSource audioSource;
     private bool hasPlayedPressSound = false;
+    private float nextDebugPressLogTime = 0f;
 
     public void SetHandPosition(Vector3 pos) { handWorldPos = pos; }
 
@@ -97,13 +100,42 @@ public class FanOption : MonoBehaviour
     public Vector3 GetBaseWorldPosition()
     {
         if (transform.parent != null)
-            return transform.parent.TransformPoint(targetLocalPos);
-        return transform.position;
+            return transform.parent.TransformPoint(targetLocalPos) + transform.TransformVector(interactionLocalCenter);
+        return transform.TransformPoint(interactionLocalCenter);
+    }
+
+    public Vector3 GetClosestInteractionPoint(Vector3 worldPoint)
+    {
+        if (interactionCollider == null)
+            interactionCollider = GetComponent<Collider>();
+
+        if (interactionCollider != null && interactionCollider.enabled)
+            return interactionCollider.ClosestPoint(worldPoint);
+
+        return GetBaseWorldPosition();
+    }
+
+    public float GetInteractionDistance(Vector3 worldPoint)
+    {
+        return Vector3.Distance(worldPoint, GetClosestInteractionPoint(worldPoint));
+    }
+
+
+    public void SetInteractionLocalCenter(Vector3 localCenter)
+    {
+        interactionLocalCenter = localCenter;
+    }
+
+    public void ApplyBaseScale(Vector3 newBaseScale)
+    {
+        baseScale = newBaseScale;
+        transform.localScale = baseScale;
     }
 
     void Awake()
     {
         rend = GetComponentInChildren<Renderer>();
+        interactionCollider = GetComponent<Collider>();
         mpb = new MaterialPropertyBlock();
         baseScale = transform.localScale;
         randomBreathPhase = Random.Range(0f, Mathf.PI * 2f);
@@ -114,7 +146,7 @@ public class FanOption : MonoBehaviour
         audioSource.spatialBlend = 0f;
         audioSource.volume = 0.6f;
 
-        if (rend.sharedMaterial.HasProperty(EmissionProp))
+        if (rend != null && rend.sharedMaterial != null && rend.sharedMaterial.HasProperty(EmissionProp))
         {
             baseEmissionColor = rend.sharedMaterial.GetColor(EmissionProp);
         }
@@ -293,10 +325,12 @@ public class FanOption : MonoBehaviour
 
                 if (isTeleportButton)
                 {
+                    Debug.Log($"[FanMenu][FanOption] CLICK_TELEPORT option={name} index={optionIndex} press={press:F2} inflation={currentInflationProgress:F2}");
                     OnOptionSelected?.Invoke(optionIndex);
                 }
                 else
                 {
+                    Debug.Log($"[FanMenu][FanOption] CLICK_INITIAL option={name} index={optionIndex} label={label} press={press:F2} inflation={currentInflationProgress:F2}");
                     OnInitialMenuSelected?.Invoke(optionIndex);
                     OnInitialMenuSelectedWithLabel?.Invoke(optionIndex, label);
                 }
@@ -308,6 +342,11 @@ public class FanOption : MonoBehaviour
                     OnMenuInteractionConfirmed?.Invoke();
                 }
             }
+        }
+        else if (press > 0.5f && Time.time >= nextDebugPressLogTime)
+        {
+            nextDebugPressLogTime = Time.time + 0.5f;
+            Debug.Log($"[FanMenu][FanOption] PRESS_WAIT option={name} index={optionIndex} press={press:F2} inflation={currentInflationProgress:F2}/{requiredInflationToClick:F2} appearing={isAppearing} fading={isFadingOut}");
         }
         else if (press < 0.1f)
         {
@@ -325,21 +364,24 @@ public class FanOption : MonoBehaviour
 
     public void SetAlpha(float alpha)
     {
-        if (rend == null) return;
+        if (rend == null || rend.sharedMaterial == null) return;
         rend.GetPropertyBlock(mpb);
 
-        Color currentColor = rend.sharedMaterial.HasProperty(ColorPropURP)
-            ? rend.sharedMaterial.GetColor(ColorPropURP)
-            : rend.sharedMaterial.color;
+        Material material = rend.sharedMaterial;
+        bool hasBaseColor = material.HasProperty(ColorPropURP);
+        bool hasBuiltInColor = material.HasProperty(ColorPropBuiltIn);
+        Color currentColor = hasBaseColor
+            ? material.GetColor(ColorPropURP)
+            : hasBuiltInColor ? material.GetColor(ColorPropBuiltIn) : Color.white;
 
         currentColor.a = alpha;
 
-        if (rend.sharedMaterial.HasProperty(ColorPropURP))
+        if (hasBaseColor)
             mpb.SetColor(ColorPropURP, currentColor);
-        else
+        else if (hasBuiltInColor)
             mpb.SetColor(ColorPropBuiltIn, currentColor);
 
-        if (rend.sharedMaterial.HasProperty(EmissionProp))
+        if (material.HasProperty(EmissionProp))
         {
             float scaleProgress = 0f;
             if (maxGrowth > 1f) scaleProgress = Mathf.Clamp01((currentScaleMultiplier - 1f) / (maxGrowth - 1f));
@@ -442,6 +484,7 @@ public class FanOption : MonoBehaviour
     void Awake()
     {
         rend = GetComponentInChildren<Renderer>();
+        interactionCollider = GetComponent<Collider>();
         mpb = new MaterialPropertyBlock();
         baseScale = transform.localScale;
         randomBreathPhase = Random.Range(0f, Mathf.PI * 2f);
@@ -452,7 +495,7 @@ public class FanOption : MonoBehaviour
         audioSource.spatialBlend = 0f;
         audioSource.volume = 0.6f;
 
-        if (rend.sharedMaterial.HasProperty(EmissionProp))
+        if (rend != null && rend.sharedMaterial != null && rend.sharedMaterial.HasProperty(EmissionProp))
         {
             baseEmissionColor = rend.sharedMaterial.GetColor(EmissionProp);
         }
@@ -643,7 +686,7 @@ public class FanOption : MonoBehaviour
 
     public void SetAlpha(float alpha)
     {
-        if (rend == null) return;
+        if (rend == null || rend.sharedMaterial == null) return;
         rend.GetPropertyBlock(mpb);
 
         Color currentColor = rend.sharedMaterial.HasProperty(ColorPropURP)
@@ -741,6 +784,7 @@ public class FanOption : MonoBehaviour
     void Awake()
     {
         rend = GetComponentInChildren<Renderer>();
+        interactionCollider = GetComponent<Collider>();
         mpb = new MaterialPropertyBlock();
         baseScale = transform.localScale;
         randomBreathPhase = Random.Range(0f, Mathf.PI * 2f);
@@ -751,7 +795,7 @@ public class FanOption : MonoBehaviour
         audioSource.spatialBlend = 0f;
         audioSource.volume = 0.6f;
 
-        if (rend.sharedMaterial.HasProperty(EmissionProp))
+        if (rend != null && rend.sharedMaterial != null && rend.sharedMaterial.HasProperty(EmissionProp))
         {
             baseEmissionColor = rend.sharedMaterial.GetColor(EmissionProp);
         }
@@ -923,7 +967,7 @@ public class FanOption : MonoBehaviour
 
     public void SetAlpha(float alpha)
     {
-        if (rend == null) return;
+        if (rend == null || rend.sharedMaterial == null) return;
         rend.GetPropertyBlock(mpb);
 
         Color currentColor = rend.sharedMaterial.HasProperty(ColorPropURP)
@@ -1022,6 +1066,7 @@ public class FanOption : MonoBehaviour
     void Awake()
     {
         rend = GetComponentInChildren<Renderer>();
+        interactionCollider = GetComponent<Collider>();
         mpb = new MaterialPropertyBlock();
         baseScale = transform.localScale;
         randomBreathPhase = Random.Range(0f, Mathf.PI * 2f);
@@ -1032,7 +1077,7 @@ public class FanOption : MonoBehaviour
         audioSource.spatialBlend = 0f;
         audioSource.volume = 0.6f;
 
-        if (rend.sharedMaterial.HasProperty(EmissionProp))
+        if (rend != null && rend.sharedMaterial != null && rend.sharedMaterial.HasProperty(EmissionProp))
         {
             baseEmissionColor = rend.sharedMaterial.GetColor(EmissionProp);
         }
@@ -1212,7 +1257,7 @@ public class FanOption : MonoBehaviour
 
     public void SetAlpha(float alpha)
     {
-        if (rend == null) return;
+        if (rend == null || rend.sharedMaterial == null) return;
         rend.GetPropertyBlock(mpb);
 
         Color currentColor = rend.sharedMaterial.HasProperty(ColorPropURP)

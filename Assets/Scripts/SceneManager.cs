@@ -32,6 +32,7 @@ public class SceneManager : MonoBehaviour
     private const string RoomWhite = "blanca";
     private const string RoomAdult = "adult";
     private const string RoomChild = "infantil";
+    private const string AmbientLightLevelCommand = "CMD_AMBIENT_LIGHT_LEVEL:";
 
     public enum FaseApp { MenuInicial, SeleccionandoUsuario, EsperandoConexion, Tutorial, Jugando }
     private FaseApp faseActual = FaseApp.MenuInicial;
@@ -53,6 +54,9 @@ public class SceneManager : MonoBehaviour
 
     [Header("Passthrough (AR -> VR)")]
     public OVRPassthroughLayer passthroughLayer;
+
+    [Header("Luz ambiente")]
+    public AmbientLightIntensityController ambientLightController;
 
     [Header("Gesti�n de Red")]
     public LANDiscovery lanDiscovery;
@@ -105,6 +109,11 @@ public class SceneManager : MonoBehaviour
     [Header("Puntos de Aparici�n y Teletransporte (Sala)")]
     [Tooltip("Se usan en orden fijo. Los 6 primeros son las posiciones disponibles para objetos en VR.")]
     public List<PuntoSala> puntosDeAparicion;
+    [Header("Jumping Points")]
+    public bool ajustarJumpingPointsCercaDelElemento = true;
+    public float distanciaJumpingPointDesdeBorde = 0.55f;
+    public float distanciaJumpingPointMinima = 0.45f;
+    public float distanciaJumpingPointMaxima = 2.0f;
 
     private List<GameObject> objetosGeneradosEnSala = new List<GameObject>();
     private List<GameObject> opcionesMenuJugando = new List<GameObject>();
@@ -114,10 +123,19 @@ public class SceneManager : MonoBehaviour
 
     private bool tabletRecienConectada = false;
     private bool recuperandoSesionMultidispositivo = false;
+    private bool transicionVRActiva = false;
+    private bool preparandoEntradaVR = false;
     private int ultimoUsuarioMultidispositivoProcesado = -1;
+    private bool omitirSiguienteSyncVr = false;
+    private readonly List<MonoBehaviour> interaccionesVrPausadas = new List<MonoBehaviour>();
 
     // --- NUEVO: Variable para recordar qu� objeto de tutorial est� activo y poder borrarlo ---
     private GameObject elementoTutorialActivo;
+    private string idTutorialActivo;
+    [Header("Tutorial")]
+    public float tutorialDistanceFromHead = 0.25f;
+    public float tutorialAssumedPlayerHeight = 1.6f;
+    [Range(0f, 1f)] public float tutorialCenterHeightRatio = 0.5f;
 
 
     // Diccionario m�gico para recordar en qu� coordenada ha ca�do cada elemento
@@ -645,9 +663,30 @@ public class SceneManager : MonoBehaviour
 
     void IniciarExperienciaVR()
     {
-        faseActual = FaseApp.Jugando;
-        // Lanzamos la corrutina que hace el efecto visual
-        StartCoroutine(RutinaTransicionVR());
+        try
+        {
+            if (transicionVRActiva)
+            {
+                Debug.Log("[VR] Ignorada solicitud de entrada: transicion VR ya activa.");
+                return;
+            }
+
+            if (faseActual == FaseApp.Jugando && salaMultisensorial != null && salaMultisensorial.activeInHierarchy)
+            {
+                Debug.Log("[VR] Ignorada solicitud de entrada: la sala VR ya esta activa.");
+                return;
+            }
+
+            Debug.Log("[VR] Iniciando transicion a VR.");
+            transicionVRActiva = true;
+            faseActual = FaseApp.Jugando;
+            StartCoroutine(RutinaTransicionVR());
+        }
+        catch (Exception e)
+        {
+            transicionVRActiva = false;
+            Debug.LogError("[VR] Error iniciando experiencia VR: " + e);
+        }
     }
 
     IEnumerator IniciarExperienciaVRParaUsuarioIndependiente(string nombreUsuario)
@@ -681,9 +720,13 @@ public class SceneManager : MonoBehaviour
 
         List<string> ids = ExtraerIdsVrUltimaSesion(ultimaSesion);
         if (ids.Count > 0)
-            RecibirDatosDeLaTablet(ids);
-
-        IniciarExperienciaVR();
+        {
+            yield return StartCoroutine(PrepararEntradaVRSegura(ids));
+        }
+        else
+        {
+            IniciarExperienciaVR();
+        }
     }
 
     IEnumerator IniciarExperienciaVRMultidispositivoDesdeUltimaSesion(int userId)
@@ -705,6 +748,8 @@ public class SceneManager : MonoBehaviour
         if (!string.IsNullOrEmpty(error))
         {
             Debug.LogWarning("[MULTI] No se pudo cargar la ultima sesion del usuario multidispositivo: " + error);
+            EnviarSeleccionPreparacionATablet(new List<string>());
+            ProcesarCambioAPassthrough(FaseApp.Jugando);
             recuperandoSesionMultidispositivo = false;
             yield break;
         }
@@ -712,17 +757,22 @@ public class SceneManager : MonoBehaviour
         List<string> ids = ExtraerIdsVrUltimaSesion(ultimaSesion);
         if (ultimaSesion == null || ids.Count == 0)
         {
-            Debug.Log("[MULTI] Sin ultima sesion VR recuperable. Se mantiene el flujo normal Tutorial -> Preparacion -> VR.");
+            Debug.Log("[MULTI] Sin ultima sesion VR recuperable. Se mantiene el modo seleccion.");
+            AplicarConfiguracionUltimaSesion(ultimaSesion);
+            EnviarSeleccionPreparacionATablet(new List<string>());
+            ProcesarCambioAPassthrough(FaseApp.Jugando);
             recuperandoSesionMultidispositivo = false;
             yield break;
         }
 
-        Debug.Log($"[MULTI] Ultima sesion recuperada para usuario {userId}. Elementos VR: {string.Join(",", ids)}");
+        Debug.Log($"[MULTI] Ultima sesion recuperada para usuario {userId}. Elementos cargados en seleccion: {string.Join(",", ids)}");
         AplicarConfiguracionUltimaSesion(ultimaSesion);
+        omitirSiguienteSyncVr = true;
         RecibirDatosDeLaTablet(ids);
+        EnviarSeleccionPreparacionATablet(ids);
+        ProcesarCambioAPassthrough(FaseApp.Jugando);
 
         recuperandoSesionMultidispositivo = false;
-        IniciarExperienciaVR();
     }
 
     User BuscarUsuarioIndependiente(string nombreUsuario)
@@ -791,13 +841,23 @@ public class SceneManager : MonoBehaviour
 
     IEnumerator RutinaTransicionVR()
     {
-        // 1. Pantalla a negro lentamente (1.5 segundos)
+        Debug.Log("[VR] Transicion: fade a negro.");
         if (teleportManager != null)
             yield return StartCoroutine(teleportManager.FadeToBlack(1.5f));
 
-        // 2. En la oscuridad, damos el cambiazo (Apagamos realidad, encendemos VR)
-        if (passthroughLayer != null) passthroughLayer.hidden = true;
+        Debug.Log("[VR] Transicion: activando sala virtual.");
+        if (passthroughLayer != null)
+        {
+            Debug.Log("[VR] Paso: ocultando passthrough.");
+            passthroughLayer.hidden = true;
+            Debug.Log("[VR] Paso OK: passthrough oculto.");
+        }
+
+        PausarInteraccionesObjetosSala();
+
+        Debug.Log("[VR] Paso: SetSalaActiva(true) inicio.");
         SetSalaActiva(true);
+        Debug.Log("[VR] Paso OK: SetSalaActiva(true) fin.");
 
         if (menuActivator != null)
         {
@@ -808,11 +868,18 @@ public class SceneManager : MonoBehaviour
             if (menuActivator.fanMenu != null) menuActivator.fanMenu.spacingAngle = separacionMenuUsuarios;
         }
 
-        // 3. Volvemos a la luz lentamente (1.5 segundos) revelando el mundo virtual
+        Debug.Log("[VR] Transicion: fade a claro.");
         if (teleportManager != null)
+        {
+            Debug.Log("[VR] Paso: FadeToClear inicio.");
             yield return StartCoroutine(teleportManager.FadeToClear(1.5f));
+            Debug.Log("[VR] Paso OK: FadeToClear fin.");
+        }
 
-        Debug.Log("�Transici�n a VR completada con elegancia!");
+        ReanudarInteraccionesObjetosSala();
+        AplicarAjustesPostEntradaVr();
+        transicionVRActiva = false;
+        Debug.Log("[VR] Transicion a VR completada.");
     }
 
     // ==========================================
@@ -857,7 +924,7 @@ public class SceneManager : MonoBehaviour
             if (canvasConexion != null) canvasConexion.SetActive(false);
             if (lanDiscovery != null) lanDiscovery.StopBroadcast();
 
-            ProcesarCambioAPassthrough(FaseApp.Tutorial);
+            ProcesarCambioAPassthrough(FaseApp.Jugando);
         }
 
         // 2. NUEVO: L�GICA PARA ESCUCHAR A LA TABLET CONSTANTEMENTE
@@ -909,6 +976,12 @@ public class SceneManager : MonoBehaviour
                     AplicarTipoSala(tipoSala, faseActual == FaseApp.Jugando);
                     continue;
                 }
+                else if (mensajeRecibido.StartsWith(AmbientLightLevelCommand))
+                {
+                    Debug.Log("[LUZ] Recibido nivel de luz desde tablet: " + mensajeRecibido);
+                    AplicarNivelLuzAmbiente(mensajeRecibido.Substring(AmbientLightLevelCommand.Length));
+                    continue;
+                }
 
                 // --- COMANDOS CON DATOS ---
                 if (mensajeRecibido.StartsWith("TUTORIAL:"))
@@ -918,11 +991,18 @@ public class SceneManager : MonoBehaviour
                 }
                 else if (mensajeRecibido.StartsWith("VR:"))
                 {
-                    string colores = mensajeRecibido.Split(':')[1];
-                    List<string> listaParaElEscenario = new List<string>(colores.Split(','));
+                    try
+                    {
+                        string colores = mensajeRecibido.Substring("VR:".Length);
+                        Debug.Log("[VR] Solicitud de entrada recibida: " + colores);
+                        List<string> listaParaElEscenario = new List<string>(colores.Split(','));
 
-                    RecibirDatosDeLaTablet(listaParaElEscenario);
-                    IniciarExperienciaVR();
+                        StartCoroutine(PrepararEntradaVRSegura(listaParaElEscenario));
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogError("[VR] Error preparando entrada a VR: " + e);
+                    }
                 }
                 else if (mensajeRecibido.StartsWith("TELEPORT:"))
                 {
@@ -998,6 +1078,30 @@ public class SceneManager : MonoBehaviour
     }
   
     // --- NUEVO: Funci�n que decide si hace falta fundido o no ---
+    private void AplicarNivelLuzAmbiente(string rawLevel)
+    {
+        if (!int.TryParse(rawLevel, out int level))
+        {
+            Debug.LogWarning("[LUZ] Nivel de luz ambiente invalido: " + rawLevel);
+            return;
+        }
+
+        if (ambientLightController == null)
+            ambientLightController = FindFirstObjectByType<AmbientLightIntensityController>();
+
+        if (ambientLightController == null)
+        {
+            Debug.LogWarning("[LUZ] No hay AmbientLightIntensityController asignado en la escena.");
+            return;
+        }
+
+        ambientLightController.SetLevel(level);
+        Debug.Log("[LUZ] Nivel de luz aplicado en VR: " + level);
+
+        if (connectionServer != null && connectionServer.connected)
+            connectionServer.Send(AmbientLightLevelCommand + ambientLightController.currentLevel);
+    }
+
     private void ProcesarCambioAPassthrough(FaseApp nuevaFase)
     {
         if (faseActual == FaseApp.Jugando && salaMultisensorial != null && salaMultisensorial.activeSelf)
@@ -1011,7 +1115,7 @@ public class SceneManager : MonoBehaviour
             // NO hay fundido a negro de pantalla. Solo borramos el objeto 3D del tutorial al instante.
             faseActual = nuevaFase;
 
-            if (elementoTutorialActivo != null) Destroy(elementoTutorialActivo);
+            DestruirElementoTutorialActivo();
 
             // Nos aseguramos de que el entorno VR est� apagado y las c�maras encendidas
             SetSalaActiva(false);
@@ -1029,9 +1133,10 @@ public class SceneManager : MonoBehaviour
 
         // 2. EN LA OSCURIDAD: Hacemos el cambiazo
         faseActual = nuevaFase;
-        if (elementoTutorialActivo != null) Destroy(elementoTutorialActivo);
+        DestruirElementoTutorialActivo();
 
         SetSalaActiva(false);
+        DestruirObjetosSalaGenerados();
         if (passthroughLayer != null) passthroughLayer.hidden = false;
         if (menuActivator != null) menuActivator.canOpenWithPalms = false;
 
@@ -1047,32 +1152,32 @@ public class SceneManager : MonoBehaviour
     // ==========================================
     void MostrarElementoEnTutorial(string idTablet)
     {
-        // 1. Borramos el elemento que estuvi�ramos ense�ando antes
-        if (elementoTutorialActivo != null)
-        {
-            Destroy(elementoTutorialActivo);
-        }
+        if (elementoTutorialActivo != null && idTutorialActivo == idTablet)
+            return;
+        DestruirElementoTutorialActivo();
+        idTutorialActivo = idTablet;
 
-        // 2. Buscamos el elemento en la base de datos
         ElementoVR elemento = baseDatosElementos.Find(e => e.idElemento == idTablet);
 
-        if (elemento.prefabHabitacion != null)
+        if (elemento.prefabHabitacion != null && Camera.main != null)
         {
-            // 3. Calculamos una posici�n c�moda: 1 metro directamente delante de la cara del usuario, a la altura de su pecho
             Transform cam = Camera.main.transform;
             Vector3 direccionPlana = cam.forward;
             direccionPlana.y = 0;
+            if (direccionPlana.sqrMagnitude < 0.001f)
+                direccionPlana = cam.transform.forward;
             direccionPlana.Normalize();
 
-            Vector3 posicionAparicion = cam.position + (direccionPlana * 1.0f);
-            posicionAparicion.y = cam.position.y - 0.2f; // Un poco por debajo de los ojos
+            float floorY = Mathf.Max(0f, cam.position.y - Mathf.Max(0.5f, tutorialAssumedPlayerHeight));
+            float targetCenterY = Mathf.Lerp(floorY, cam.position.y, Mathf.Clamp01(tutorialCenterHeightRatio));
+            Vector3 posicionAparicion = cam.position + (direccionPlana * Mathf.Max(0.1f, tutorialDistanceFromHead));
+            posicionAparicion.y = targetCenterY;
 
-            // 4. Instanciamos el objeto en el mundo real (Passthrough)
             elementoTutorialActivo = Instantiate(elemento.prefabHabitacion, posicionAparicion, Quaternion.LookRotation(direccionPlana));
+            AlinearCentroVisualTutorial(elementoTutorialActivo, targetCenterY);
 
-            Debug.Log($"Mostrando {idTablet} en modo Tutorial.");
+            Debug.Log($"Mostrando {idTablet} en modo Tutorial. centerY={targetCenterY:F2}");
 
-            // --- NUEVO: Chivatazo a la tablet (Modo Tutorial) ---
             if (connectionServer != null && connectionServer.connected)
             {
                 Transform transformTutorial = elementoTutorialActivo.transform;
@@ -1086,14 +1191,82 @@ public class SceneManager : MonoBehaviour
                 connectionServer.Send($"SYNC_TUT:{idTablet}|{px},{py},{pz}|{ry}");
             }
         }
-
     }
 
-  
+    void AlinearCentroVisualTutorial(GameObject objeto, float targetCenterY)
+    {
+        if (objeto == null)
+            return;
+
+        Bounds bounds;
+        if (!TryGetRendererBounds(objeto, out bounds))
+            return;
+
+        Vector3 pos = objeto.transform.position;
+        pos.y += targetCenterY - bounds.center.y;
+        objeto.transform.position = pos;
+    }
+
+    bool TryGetRendererBounds(GameObject root, out Bounds bounds)
+    {
+        bool hasBounds = false;
+        bounds = new Bounds(root != null ? root.transform.position : Vector3.zero, Vector3.zero);
+        if (root == null)
+            return false;
+
+        Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+        foreach (Renderer renderer in renderers)
+        {
+            if (renderer == null || renderer is ParticleSystemRenderer || renderer is LineRenderer || renderer is TrailRenderer)
+                continue;
+
+            if (!hasBounds)
+            {
+                bounds = renderer.bounds;
+                hasBounds = true;
+            }
+            else
+            {
+                bounds.Encapsulate(renderer.bounds);
+            }
+        }
+
+        return hasBounds;
+    }
+
+    void DestruirElementoTutorialActivo()
+    {
+        if (elementoTutorialActivo == null)
+            return;
+
+        DestruirInstanciaPrefabSegura(elementoTutorialActivo);
+        elementoTutorialActivo = null;
+        idTutorialActivo = null;
+    }
 
     // ==========================================
     // FASE VR COMPLETA
     // ==========================================
+    IEnumerator PrepararEntradaVRSegura(List<string> elementosSeleccionadosTablet)
+    {
+        if (preparandoEntradaVR || transicionVRActiva)
+        {
+            Debug.Log("[VR] Ignorada preparacion: ya hay una entrada VR en curso.");
+            yield break;
+        }
+
+        preparandoEntradaVR = true;
+
+        DestruirElementoTutorialActivo();
+        yield return null;
+
+        RecibirDatosDeLaTablet(elementosSeleccionadosTablet);
+        yield return null;
+
+        preparandoEntradaVR = false;
+        IniciarExperienciaVR();
+    }
+
     public void RecibirDatosDeLaTablet(List<string> elementosSeleccionadosTablet)
     {
         RecibirDatosDeLaTabletConPosicionesFijas(elementosSeleccionadosTablet);
@@ -1102,17 +1275,24 @@ public class SceneManager : MonoBehaviour
 
     void RecibirDatosDeLaTabletConPosicionesFijas(List<string> elementosSeleccionadosTablet)
     {
-        if (elementosSeleccionadosTablet == null)
-            elementosSeleccionadosTablet = new List<string>();
+        try
+        {
+            if (elementosSeleccionadosTablet == null)
+                elementosSeleccionadosTablet = new List<string>();
 
-        List<string> idsSeleccionados = NormalizarListaElementos(elementosSeleccionadosTablet);
+            List<string> idsSeleccionados = NormalizarListaElementos(elementosSeleccionadosTablet);
+            Debug.Log("[VR] Preparando elementos: " + string.Join(",", idsSeleccionados));
 
-        if (elementoTutorialActivo != null)
-            Destroy(elementoTutorialActivo);
+            DestruirElementoTutorialActivo();
 
-        EliminarObjetosNoSeleccionados(idsSeleccionados);
-        CrearObjetosNuevosEnPuntosFijos(idsSeleccionados);
-        ReconstruirEstadoVr(idsSeleccionados);
+            EliminarObjetosNoSeleccionados(idsSeleccionados);
+            CrearObjetosNuevosEnPuntosFijos(idsSeleccionados);
+            ReconstruirEstadoVr(idsSeleccionados);
+        }
+        catch (Exception e)
+        {
+            Debug.LogError("[VR] Error reconstruyendo estado VR: " + e);
+        }
     }
 
     List<string> NormalizarListaElementos(List<string> elementosSeleccionadosTablet)
@@ -1148,7 +1328,7 @@ public class SceneManager : MonoBehaviour
             if (objetosGeneradosPorId.TryGetValue(id, out GameObject obj) && obj != null)
             {
                 objetosGeneradosEnSala.Remove(obj);
-                Destroy(obj);
+                DestruirInstanciaPrefabSegura(obj);
             }
 
             objetosGeneradosPorId.Remove(id);
@@ -1157,31 +1337,168 @@ public class SceneManager : MonoBehaviour
         }
     }
 
+    void DestruirObjetosSalaGenerados()
+    {
+        foreach (GameObject obj in objetosGeneradosEnSala)
+        {
+            if (obj != null)
+                DestruirInstanciaPrefabSegura(obj);
+        }
+
+        objetosGeneradosEnSala.Clear();
+        objetosGeneradosPorId.Clear();
+        puntosAsignadosPorId.Clear();
+        mapaDeTeleports.Clear();
+        idsOrdenadosParaTeleport.Clear();
+        opcionesMenuJugando.Clear();
+
+        if (teleportManager != null)
+            teleportManager.teleportDestinations = null;
+
+        if (menuActivator != null)
+            menuActivator.opcionesDePartida = opcionesMenuJugando;
+    }
+
+    void DestruirInstanciaPrefabSegura(GameObject instancia)
+    {
+        if (instancia == null)
+            return;
+
+        AudioSource[] audioSources = instancia.GetComponentsInChildren<AudioSource>(true);
+        foreach (AudioSource audioSource in audioSources)
+        {
+            if (audioSource != null)
+                audioSource.Stop();
+        }
+
+        Collider[] colliders = instancia.GetComponentsInChildren<Collider>(true);
+        foreach (Collider collider in colliders)
+        {
+            if (collider != null)
+                collider.enabled = false;
+        }
+
+        MonoBehaviour[] behaviours = instancia.GetComponentsInChildren<MonoBehaviour>(true);
+        foreach (MonoBehaviour behaviour in behaviours)
+        {
+            if (behaviour != null)
+                behaviour.enabled = false;
+        }
+
+        instancia.SetActive(false);
+        Destroy(instancia);
+    }
+
+    void PausarInteraccionesObjetosSala()
+    {
+        interaccionesVrPausadas.Clear();
+
+        foreach (GameObject obj in objetosGeneradosEnSala)
+        {
+            if (obj == null)
+                continue;
+
+            MonoBehaviour[] behaviours = obj.GetComponentsInChildren<MonoBehaviour>(true);
+            foreach (MonoBehaviour behaviour in behaviours)
+            {
+                if (behaviour == null || !behaviour.enabled)
+                    continue;
+
+                System.Type tipo = behaviour.GetType();
+                string nombreTipo = tipo != null ? tipo.FullName : "";
+                if (string.IsNullOrEmpty(nombreTipo) || !nombreTipo.StartsWith("Oculus.Interaction"))
+                    continue;
+
+                behaviour.enabled = false;
+                interaccionesVrPausadas.Add(behaviour);
+            }
+        }
+
+        if (interaccionesVrPausadas.Count > 0)
+            Debug.Log($"[VR] Interacciones Oculus pausadas durante entrada: {interaccionesVrPausadas.Count}");
+    }
+
+    void ReanudarInteraccionesObjetosSala()
+    {
+        if (interaccionesVrPausadas.Count == 0)
+            return;
+
+        int reanudadas = 0;
+        foreach (MonoBehaviour behaviour in interaccionesVrPausadas)
+        {
+            if (behaviour == null)
+                continue;
+
+            behaviour.enabled = true;
+            reanudadas++;
+        }
+
+        interaccionesVrPausadas.Clear();
+        Debug.Log($"[VR] Interacciones Oculus reanudadas tras entrada: {reanudadas}");
+    }
+
     void CrearObjetosNuevosEnPuntosFijos(List<string> idsSeleccionados)
     {
         foreach (string idTablet in idsSeleccionados)
         {
-            if (objetosGeneradosPorId.ContainsKey(idTablet))
-                continue;
-
-            ElementoVR elemento = baseDatosElementos.Find(e => e.idElemento == idTablet);
-            if (elemento.prefabHabitacion == null)
-                continue;
-
-            if (!TryGetSiguientePuntoLibre(out PuntoSala puntoElegido))
+            try
             {
-                Debug.LogWarning("No quedan puntos libres para colocar el elemento: " + idTablet);
-                continue;
+                if (objetosGeneradosPorId.ContainsKey(idTablet))
+                    continue;
+
+                ElementoVR elemento = baseDatosElementos.Find(e => e.idElemento == idTablet);
+                if (elemento.prefabHabitacion == null)
+                {
+                    Debug.LogWarning("[VR] Elemento sin prefabHabitacion: " + idTablet);
+                    continue;
+                }
+
+                if (!TryGetPuntoLibreParaElemento(idTablet, out PuntoSala puntoElegido))
+                {
+                    Debug.LogWarning("No quedan puntos libres para colocar el elemento: " + idTablet);
+                    continue;
+                }
+
+                Transform parentTransform = salaMultisensorial != null ? salaMultisensorial.transform : null;
+                Debug.Log("[VR] Instanciando elemento '" + idTablet + "' con prefab '" + elemento.prefabHabitacion.name + "' en punto " + puntoElegido.puntoAparicion.position);
+                GameObject nuevoObjetoSala = Instantiate(elemento.prefabHabitacion, puntoElegido.puntoAparicion.position, puntoElegido.puntoAparicion.rotation, parentTransform);
+
+                objetosGeneradosEnSala.Add(nuevoObjetoSala);
+                objetosGeneradosPorId[idTablet] = nuevoObjetoSala;
+                puntosAsignadosPorId[idTablet] = puntoElegido;
+                mapaDeTeleports[idTablet] = puntoElegido.puntoTeletransporte;
             }
-
-            Transform parentTransform = salaMultisensorial != null ? salaMultisensorial.transform : null;
-            GameObject nuevoObjetoSala = Instantiate(elemento.prefabHabitacion, puntoElegido.puntoAparicion.position, puntoElegido.puntoAparicion.rotation, parentTransform);
-
-            objetosGeneradosEnSala.Add(nuevoObjetoSala);
-            objetosGeneradosPorId[idTablet] = nuevoObjetoSala;
-            puntosAsignadosPorId[idTablet] = puntoElegido;
-            mapaDeTeleports[idTablet] = puntoElegido.puntoTeletransporte;
+            catch (Exception e)
+            {
+                Debug.LogError("[VR] Error instanciando elemento '" + idTablet + "': " + e);
+            }
         }
+    }
+
+    void AlinearMinimoVisualConSuelo(GameObject objetoSala, float sueloY, string idTablet)
+    {
+        if (objetoSala == null)
+            return;
+
+        Bounds bounds;
+        if (!TryGetRendererBounds(objetoSala, out bounds))
+            return;
+
+        float ajusteY = sueloY - bounds.min.y;
+        if (Mathf.Abs(ajusteY) < 0.001f)
+            return;
+
+        if (Mathf.Abs(ajusteY) > 2f)
+        {
+            Debug.LogWarning($"[VR] {idTablet}: alineacion al suelo omitida por ajusteY demasiado grande ({ajusteY:F3}).");
+            return;
+        }
+
+        Vector3 posicion = objetoSala.transform.position;
+        posicion.y += ajusteY;
+        objetoSala.transform.position = posicion;
+
+        Debug.Log($"[VR] {idTablet}: base visual alineada al suelo. minY={bounds.min.y:F3} sueloY={sueloY:F3} ajusteY={ajusteY:F3}");
     }
 
     bool TryGetSiguientePuntoLibre(out PuntoSala puntoLibre)
@@ -1194,17 +1511,7 @@ public class SceneManager : MonoBehaviour
             if (punto.puntoAparicion == null)
                 continue;
 
-            bool usado = false;
-            foreach (var asignado in puntosAsignadosPorId.Values)
-            {
-                if (asignado.puntoAparicion == punto.puntoAparicion)
-                {
-                    usado = true;
-                    break;
-                }
-            }
-
-            if (!usado)
+            if (!PuntoSalaYaAsignado(punto))
             {
                 puntoLibre = punto;
                 return true;
@@ -1213,6 +1520,104 @@ public class SceneManager : MonoBehaviour
 
         puntoLibre = default;
         return false;
+    }
+
+    bool TryGetPuntoLibreParaElemento(string idTablet, out PuntoSala puntoLibre)
+    {
+        if (string.Equals(idTablet, "negre", StringComparison.OrdinalIgnoreCase) && TryGetPuntoLibreInteriorParaObjetoGrande(out puntoLibre))
+            return true;
+
+        return TryGetSiguientePuntoLibre(out puntoLibre);
+    }
+
+    bool TryGetPuntoLibreInteriorParaObjetoGrande(out PuntoSala puntoLibre)
+    {
+        int limite = Mathf.Min(6, puntosDeAparicion.Count);
+        Bounds boundsSala = default;
+        bool hayBoundsSala = salaMultisensorial != null && TryGetRendererBounds(salaMultisensorial, out boundsSala);
+        Vector3 centroSala = hayBoundsSala ? boundsSala.center : (salaMultisensorial != null ? salaMultisensorial.transform.position : Vector3.zero);
+        float margenInterior = 0.75f;
+
+        bool encontrado = false;
+        PuntoSala mejorPunto = default;
+        float mejorDistancia = float.MaxValue;
+
+        for (int i = 0; i < limite; i++)
+        {
+            PuntoSala punto = puntosDeAparicion[i];
+            if (punto.puntoAparicion == null || PuntoSalaYaAsignado(punto))
+                continue;
+
+            Vector3 posicion = punto.puntoAparicion.position;
+            if (hayBoundsSala && !PuntoDentroBoundsXZConMargen(posicion, boundsSala, margenInterior))
+                continue;
+
+            Vector3 delta = posicion - centroSala;
+            delta.y = 0f;
+            float distancia = delta.sqrMagnitude;
+            if (!encontrado || distancia < mejorDistancia)
+            {
+                encontrado = true;
+                mejorDistancia = distancia;
+                mejorPunto = punto;
+            }
+        }
+
+        if (encontrado)
+        {
+            puntoLibre = mejorPunto;
+            Debug.Log("[VR] negre: punto interior elegido para objeto grande en " + mejorPunto.puntoAparicion.position);
+            return true;
+        }
+
+        if (hayBoundsSala)
+        {
+            for (int i = 0; i < limite; i++)
+            {
+                PuntoSala punto = puntosDeAparicion[i];
+                if (punto.puntoAparicion == null || PuntoSalaYaAsignado(punto))
+                    continue;
+
+                Vector3 delta = punto.puntoAparicion.position - centroSala;
+                delta.y = 0f;
+                float distancia = delta.sqrMagnitude;
+                if (!encontrado || distancia < mejorDistancia)
+                {
+                    encontrado = true;
+                    mejorDistancia = distancia;
+                    mejorPunto = punto;
+                }
+            }
+
+            if (encontrado)
+            {
+                puntoLibre = mejorPunto;
+                Debug.LogWarning("[VR] negre: no habia punto con margen interior; usando punto libre mas centrado en " + mejorPunto.puntoAparicion.position);
+                return true;
+            }
+        }
+
+        puntoLibre = default;
+        return false;
+    }
+
+    bool PuntoSalaYaAsignado(PuntoSala punto)
+    {
+        foreach (var asignado in puntosAsignadosPorId.Values)
+        {
+            if (asignado.puntoAparicion == punto.puntoAparicion)
+                return true;
+        }
+
+        return false;
+    }
+
+    bool PuntoDentroBoundsXZConMargen(Vector3 posicion, Bounds bounds, float margen)
+    {
+        return posicion.x >= bounds.min.x + margen &&
+               posicion.x <= bounds.max.x - margen &&
+               posicion.z >= bounds.min.z + margen &&
+               posicion.z <= bounds.max.z - margen;
     }
 
     void ReconstruirEstadoVr(List<string> idsSeleccionados)
@@ -1245,14 +1650,86 @@ public class SceneManager : MonoBehaviour
         if (paqueteSync.EndsWith(";"))
             paqueteSync = paqueteSync.Substring(0, paqueteSync.Length - 1);
 
-        if (connectionServer != null && connectionServer.connected)
+        if (connectionServer != null && connectionServer.connected && !omitirSiguienteSyncVr)
             connectionServer.Send(paqueteSync);
+
+        omitirSiguienteSyncVr = false;
 
         if (menuActivator != null)
             menuActivator.opcionesDePartida = opcionesMenuJugando;
 
         if (teleportManager != null)
             teleportManager.teleportDestinations = destinosTeleportActivos.ToArray();
+    }
+
+    void AplicarAjustesPostEntradaVr()
+    {
+        List<Transform> destinosTeleportActivos = new List<Transform>();
+
+        foreach (string idTablet in idsOrdenadosParaTeleport)
+        {
+            if (!objetosGeneradosPorId.TryGetValue(idTablet, out GameObject objetoSala) || objetoSala == null)
+                continue;
+
+            if (!puntosAsignadosPorId.TryGetValue(idTablet, out PuntoSala punto))
+                continue;
+
+            if (punto.puntoAparicion != null)
+                AlinearMinimoVisualConSuelo(objetoSala, punto.puntoAparicion.position.y, idTablet);
+
+            AjustarJumpingPointCercaDelElemento(objetoSala, punto.puntoTeletransporte, idTablet);
+
+            if (punto.puntoTeletransporte != null)
+            {
+                destinosTeleportActivos.Add(punto.puntoTeletransporte);
+                mapaDeTeleports[idTablet] = punto.puntoTeletransporte;
+            }
+        }
+
+        if (teleportManager != null)
+            teleportManager.teleportDestinations = destinosTeleportActivos.ToArray();
+    }
+
+    void AjustarJumpingPointCercaDelElemento(GameObject objetoSala, Transform jumpingPoint, string idTablet)
+    {
+        if (!ajustarJumpingPointsCercaDelElemento || objetoSala == null || jumpingPoint == null)
+            return;
+
+        Bounds bounds;
+        if (!TryGetRendererBounds(objetoSala, out bounds))
+            return;
+
+        Vector3 centro = bounds.center;
+        Vector3 direccion = jumpingPoint.position - centro;
+        direccion.y = 0f;
+
+        if (direccion.sqrMagnitude < 0.001f)
+        {
+            direccion = -objetoSala.transform.forward;
+            direccion.y = 0f;
+        }
+
+        if (direccion.sqrMagnitude < 0.001f)
+            direccion = Vector3.back;
+
+        direccion.Normalize();
+
+        float radioHorizontal = Mathf.Max(bounds.extents.x, bounds.extents.z);
+        float distancia = Mathf.Clamp(
+            radioHorizontal + Mathf.Max(0f, distanciaJumpingPointDesdeBorde),
+            Mathf.Max(0.1f, distanciaJumpingPointMinima),
+            Mathf.Max(distanciaJumpingPointMinima, distanciaJumpingPointMaxima));
+
+        Vector3 posicion = centro + direccion * distancia;
+        posicion.y = jumpingPoint.position.y;
+        jumpingPoint.position = posicion;
+
+        Vector3 mirada = centro - jumpingPoint.position;
+        mirada.y = 0f;
+        if (mirada.sqrMagnitude > 0.001f)
+            jumpingPoint.rotation = Quaternion.LookRotation(mirada.normalized, Vector3.up);
+
+        Debug.Log($"[VR] {idTablet}: jumping point ajustado cerca del elemento. pos={jumpingPoint.position} distancia={distancia:F2}");
     }
 
     string CrearEntradaSync(string idTablet, Transform transformReal)
@@ -1265,6 +1742,26 @@ public class SceneManager : MonoBehaviour
         string ry = transformReal.eulerAngles.y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
 
         return $"{idTablet}|{px},{py},{pz}|{ry}";
+    }
+
+    void EnviarSeleccionPreparacionATablet(List<string> idsSeleccionados)
+    {
+        if (connectionServer == null || !connectionServer.connected || idsSeleccionados == null)
+            return;
+
+        string paquetePrep = "PREP:";
+        foreach (string idTablet in idsSeleccionados)
+        {
+            if (!objetosGeneradosPorId.TryGetValue(idTablet, out GameObject objetoSala) || objetoSala == null)
+                continue;
+
+            paquetePrep += CrearEntradaSync(idTablet, objetoSala.transform) + ";";
+        }
+
+        if (paquetePrep.EndsWith(";"))
+            paquetePrep = paquetePrep.Substring(0, paquetePrep.Length - 1);
+
+        connectionServer.Send(paquetePrep);
     }
 
    

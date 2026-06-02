@@ -1,8 +1,10 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 public class HandInteractor : MonoBehaviour
 {
     FanOption current;
+    readonly Dictionary<FanOption, int> optionContacts = new Dictionary<FanOption, int>();
     float currentHover;
     float currentPress;
 
@@ -16,6 +18,7 @@ public class HandInteractor : MonoBehaviour
 
     // NUEVO: Referencia al collider para saber dónde está exactamente tu palma/dedos desplazados
     private Collider handCollider;
+    private float nextDebugLogTime;
 
     void Start()
     {
@@ -25,9 +28,15 @@ public class HandInteractor : MonoBehaviour
 
     void OnTriggerEnter(Collider other)
     {
-        var opt = other.GetComponent<FanOption>();
+        var opt = other.GetComponentInParent<FanOption>();
         if (opt)
         {
+            if (!optionContacts.ContainsKey(opt))
+                optionContacts[opt] = 0;
+            optionContacts[opt]++;
+
+            Debug.Log($"[FanMenu][HandInteractor] ENTER hand={name} option={opt.name} other={other.name} contacts={optionContacts[opt]}");
+
             if (current != null && current != opt) ReleaseButton();
             current = opt;
         }
@@ -35,12 +44,22 @@ public class HandInteractor : MonoBehaviour
 
     void OnTriggerExit(Collider other)
     {
-        var opt = other.GetComponent<FanOption>();
+        var opt = other.GetComponentInParent<FanOption>();
         if (opt)
         {
-            opt.SetHover(0);
-            opt.SetPress(0);
-            if (opt == current) ReleaseButton();
+            if (optionContacts.ContainsKey(opt))
+            {
+                optionContacts[opt] = Mathf.Max(0, optionContacts[opt] - 1);
+                Debug.Log($"[FanMenu][HandInteractor] EXIT hand={name} option={opt.name} other={other.name} contacts={optionContacts[opt]}");
+
+                if (optionContacts[opt] > 0)
+                    return;
+
+                optionContacts.Remove(opt);
+            }
+
+            if (opt == current)
+                ReleaseButton();
         }
     }
 
@@ -50,6 +69,7 @@ public class HandInteractor : MonoBehaviour
         {
             current.SetHover(0);
             current.SetPress(0);
+            optionContacts.Remove(current);
         }
         currentHover = 0;
         currentPress = 0;
@@ -57,6 +77,27 @@ public class HandInteractor : MonoBehaviour
         current = null;
 
         if (activeHand == this) activeHand = null;
+    }
+
+    void TryAcquireNearbyOption(Vector3 interactionPoint)
+    {
+        float radius = 0.08f;
+        if (handCollider is SphereCollider sphere)
+            radius = Mathf.Max(radius, sphere.radius * Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z));
+
+        Collider[] hits = Physics.OverlapSphere(interactionPoint, radius, ~0, QueryTriggerInteraction.Collide);
+        foreach (Collider hit in hits)
+        {
+            FanOption opt = hit.GetComponentInParent<FanOption>();
+            if (opt == null) continue;
+
+            if (!optionContacts.ContainsKey(opt))
+                optionContacts[opt] = 1;
+
+            current = opt;
+            Debug.Log($"[FanMenu][HandInteractor] ACQUIRE_OVERLAP hand={name} option={opt.name} hit={hit.name} radius={radius:F3}");
+            return;
+        }
     }
 
     void Update()
@@ -76,8 +117,12 @@ public class HandInteractor : MonoBehaviour
 
         if (!current)
         {
-            if (activeHand == this) activeHand = null;
-            return;
+            TryAcquireNearbyOption(interactionPoint);
+            if (!current)
+            {
+                if (activeHand == this) activeHand = null;
+                return;
+            }
         }
 
         if (activeHand != null && activeHand != this)
@@ -86,13 +131,14 @@ public class HandInteractor : MonoBehaviour
             return;
         }
 
-        Vector3 buttonAnchorPos = current.GetBaseWorldPosition();
+        Vector3 buttonAnchorPos = current.GetClosestInteractionPoint(interactionPoint);
 
-        // LA CORRECCIÓN: Medimos la distancia desde el centro del Collider (palma/dedos), NO desde la muñeca
-        float dist = Vector3.Distance(interactionPoint, buttonAnchorPos);
+        // Medimos contra el punto tocable mas cercano, no contra el centro del modelo.
+        float dist = current.GetInteractionDistance(interactionPoint);
 
         if (dist > 0.40f)
         {
+            Debug.Log($"[FanMenu][HandInteractor] RELEASE_DISTANCE hand={name} option={current.name} dist={dist:F3} interaction={interactionPoint} anchor={buttonAnchorPos}");
             ReleaseButton();
             return;
         }
@@ -152,6 +198,12 @@ public class HandInteractor : MonoBehaviour
 
         current.SetHover(currentHover);
         current.SetPress(currentPress);
+
+        if (Time.time >= nextDebugLogTime && (dist < 0.22f || currentPress > 0.2f))
+        {
+            nextDebugLogTime = Time.time + 0.5f;
+            Debug.Log($"[FanMenu][HandInteractor] TRACK hand={name} option={current.name} dist={dist:F3} hover={currentHover:F2} press={currentPress:F2} targetPress={targetPress:F2} speed={smoothedHandSpeed:F2} active={(activeHand != null ? activeHand.name : "null")}");
+        }
     }
 }
 

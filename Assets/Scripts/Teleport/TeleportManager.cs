@@ -34,19 +34,29 @@ public class TeleportManager : MonoBehaviour
 
     void HandleTeleport(int optionIndex)
     {
-        if (optionIndex < 0 || optionIndex >= teleportDestinations.Length) return;
+        Debug.Log($"[FanMenu][TeleportManager] HandleTeleport index={optionIndex} destinations={(teleportDestinations != null ? teleportDestinations.Length : 0)}");
+
+        if (teleportDestinations == null || optionIndex < 0 || optionIndex >= teleportDestinations.Length)
+        {
+            Debug.LogWarning($"[FanMenu][TeleportManager] Ignored teleport index={optionIndex}: destination array missing or out of range.");
+            return;
+        }
 
         Transform targetPoint = teleportDestinations[optionIndex];
         if (targetPoint != null)
         {
+            Debug.Log($"[FanMenu][TeleportManager] Teleporting to {targetPoint.name} pos={targetPoint.position} rot={targetPoint.eulerAngles}");
             StartCoroutine(TeleportRoutine(targetPoint, () =>
             {
                 // Avisamos cuando el viaje ha terminado fisicamente y el usuario vuelve a ver la escena.
                 OnUsuarioTeletransportado?.Invoke(optionIndex);
             }));
         }
+        else
+        {
+            Debug.LogWarning($"[FanMenu][TeleportManager] Ignored teleport index={optionIndex}: destination transform is null.");
+        }
     }
-
     IEnumerator TeleportRoutine(Transform target, System.Action onComplete = null)
     {
         // 1. Viaje a la oscuridad (usamos la nueva función pública)

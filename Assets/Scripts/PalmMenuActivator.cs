@@ -134,7 +134,8 @@ public class PalmMenuActivator : MonoBehaviour
         if (!fanMenu || !head || !leftHand || !rightHand) return;
 
         fanMenu.PlaceInFrontOfUser(head, leftHand, rightHand, distancia, 0.05f);
-        fanMenu.Build(specificOptions);
+        bool fitOptionsToMenu = specificOptions == opcionesDePartida && !forceMenuButtons;
+        fanMenu.Build(specificOptions, fitOptionsToMenu);
 
         menuOpened = true;
         idleTimer = 0f;
@@ -482,7 +483,8 @@ public class PalmMenuActivator : MonoBehaviour
         if (!fanMenu || !head || !leftHand || !rightHand) return;
 
         fanMenu.PlaceInFrontOfUser(head, leftHand, rightHand, distancia, 0.05f);
-        fanMenu.Build(specificOptions);
+        bool fitOptionsToMenu = specificOptions == opcionesDePartida && !forceMenuButtons;
+        fanMenu.Build(specificOptions, fitOptionsToMenu);
 
         if (forceMenuButtons)
         {
