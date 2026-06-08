@@ -38,6 +38,7 @@ public class AmbientLightIntensityController : MonoBehaviour
 
     private void Start()
     {
+        QuestCrashDiagnostics.Log("[AmbientLightIntensityController] Start " + name);
         baseAmbientLight = RenderSettings.ambientLight.maxColorComponent > 0f
             ? RenderSettings.ambientLight
             : Color.white;
@@ -58,6 +59,7 @@ public class AmbientLightIntensityController : MonoBehaviour
 
     public void SetLevel(int level)
     {
+        QuestCrashDiagnostics.Log("[AmbientLightIntensityController] SetLevel begin requested=" + level + " current=" + currentLevel);
         int totalLevels = TotalLevels;
         currentLevel = Mathf.Clamp(level, 1, totalLevels);
         float intensity = intensityLevels != null && intensityLevels.Length > 0
@@ -77,10 +79,12 @@ public class AmbientLightIntensityController : MonoBehaviour
         }
 
         LevelChanged?.Invoke(currentLevel, totalLevels);
+        QuestCrashDiagnostics.Log("[AmbientLightIntensityController] SetLevel end current=" + currentLevel + " total=" + totalLevels);
     }
 
     private IEnumerator TransitionIntensity(float targetIntensity)
     {
+        QuestCrashDiagnostics.Log("[AmbientLightIntensityController] TransitionIntensity begin target=" + targetIntensity);
         FindRoomLightsIfNeeded();
 
         float startAmbientIntensity = RenderSettings.ambientIntensity;
@@ -124,6 +128,7 @@ public class AmbientLightIntensityController : MonoBehaviour
 
         ApplyIntensity(targetIntensity);
         transitionCoroutine = null;
+        QuestCrashDiagnostics.Log("[AmbientLightIntensityController] TransitionIntensity end target=" + targetIntensity);
     }
 
     private void ApplyIntensity(float intensity)
@@ -151,6 +156,8 @@ public class AmbientLightIntensityController : MonoBehaviour
         Debug.Log("[LUZ] Intensidad ambiente aplicada: " + intensity
             + " | RenderSettings.ambientIntensity=" + RenderSettings.ambientIntensity
             + " | RenderSettings.ambientLight=" + RenderSettings.ambientLight);
+        QuestCrashDiagnostics.Log("[LUZ] Intensidad ambiente aplicada: " + intensity
+            + " roomLights=" + (roomLights != null ? roomLights.Length : 0));
     }
 
     private void FindRoomLightsIfNeeded()

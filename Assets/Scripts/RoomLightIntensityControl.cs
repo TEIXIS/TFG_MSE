@@ -23,11 +23,13 @@ public class RoomLightIntensityControl : MonoBehaviour
 
     private void Awake()
     {
+        QuestCrashDiagnostics.Log("[RoomLightIntensityControl] Awake " + name);
         propertyBlock = new MaterialPropertyBlock();
     }
 
     private void OnEnable()
     {
+        QuestCrashDiagnostics.Log("[RoomLightIntensityControl] OnEnable " + name);
         if (lightController == null)
             lightController = FindFirstObjectByType<AmbientLightIntensityController>();
 
@@ -40,18 +42,26 @@ public class RoomLightIntensityControl : MonoBehaviour
 
     private void Start()
     {
+        QuestCrashDiagnostics.Log("[RoomLightIntensityControl] Start " + name);
         if (lightController != null)
             UpdateDisplay(lightController.currentLevel, lightController.TotalLevels);
     }
 
     private void OnDisable()
     {
+        QuestCrashDiagnostics.Log("[RoomLightIntensityControl] OnDisable " + name);
         if (lightController != null)
             lightController.LevelChanged -= UpdateDisplay;
     }
 
+    private void OnDestroy()
+    {
+        QuestCrashDiagnostics.Log("[RoomLightIntensityControl] OnDestroy " + name);
+    }
+
     public void IncreaseLevel()
     {
+        QuestCrashDiagnostics.Log("[RoomLightIntensityControl] IncreaseLevel");
         if (lightController == null)
             return;
 
@@ -61,6 +71,7 @@ public class RoomLightIntensityControl : MonoBehaviour
 
     public void DecreaseLevel()
     {
+        QuestCrashDiagnostics.Log("[RoomLightIntensityControl] DecreaseLevel");
         if (lightController == null)
             return;
 
@@ -70,6 +81,8 @@ public class RoomLightIntensityControl : MonoBehaviour
 
     private void SendLevelToTablet()
     {
+        QuestCrashDiagnostics.Log("[RoomLightIntensityControl] SendLevelToTablet connected=" + (connectionServer != null && connectionServer.connected)
+            + " level=" + (lightController != null ? lightController.currentLevel : -1));
         if (connectionServer != null && connectionServer.connected && lightController != null)
             connectionServer.Send(CommandPrefix + lightController.currentLevel);
     }

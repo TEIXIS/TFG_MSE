@@ -114,6 +114,11 @@ public class SceneManager : MonoBehaviour
     public float distanciaJumpingPointDesdeBorde = 0.55f;
     public float distanciaJumpingPointMinima = 0.45f;
     public float distanciaJumpingPointMaxima = 2.0f;
+    [Header("Ajuste de objetos en sala")]
+    public float margenObjetoDentroSala = 0.15f;
+    public float margenTeleportDentroSala = 0.25f;
+    public bool centrarBoundsVisualesEnPuntoAparicion = true;
+    public float maxAjusteCentradoObjeto = 5.0f;
 
     private List<GameObject> objetosGeneradosEnSala = new List<GameObject>();
     private List<GameObject> opcionesMenuJugando = new List<GameObject>();
@@ -134,8 +139,14 @@ public class SceneManager : MonoBehaviour
     private string idTutorialActivo;
     [Header("Tutorial")]
     public float tutorialDistanceFromHead = 0.25f;
+    public float tutorialMinDistance = 0.7f;
+    public float tutorialMaxDistance = 2.4f;
+    public float tutorialBoundsPadding = 0.35f;
     public float tutorialAssumedPlayerHeight = 1.6f;
+    public float tutorialMinHeadHeight = 0.8f;
+    public float tutorialMaxHeadHeight = 2.2f;
     [Range(0f, 1f)] public float tutorialCenterHeightRatio = 0.5f;
+    private bool registrandoDiagnosticoError;
 
 
     // Diccionario m�gico para recordar en qu� coordenada ha ca�do cada elemento
@@ -147,6 +158,14 @@ public class SceneManager : MonoBehaviour
 
     IEnumerator Start()
     {
+        QuestCrashDiagnostics.Log("[SceneManager] Start coroutine begin.");
+
+        if (baseDatosElementos == null)
+            baseDatosElementos = new List<ElementoVR>();
+
+        if (puntosDeAparicion == null)
+            puntosDeAparicion = new List<PuntoSala>();
+
         ResolverReferenciasSalas();
         AplicarTipoSala(tipoSalaActual, false);
 
@@ -164,6 +183,7 @@ public class SceneManager : MonoBehaviour
 
         StartCoroutine(CargarUsuariosIndependent());
         yield return new WaitForSeconds(2.0f);
+        QuestCrashDiagnostics.Log("[SceneManager] Initial user load wait finished.");
 
         if (menuActivator != null && initialOptions != null && initialOptions.Count > 0)
         {
@@ -173,6 +193,7 @@ public class SceneManager : MonoBehaviour
             if (menuActivator.fanMenu != null) menuActivator.fanMenu.spacingAngle = separacionMenuInicial;
 
             menuActivator.OpenMenu(initialOptions);
+            QuestCrashDiagnostics.Log("[SceneManager] Initial menu opened.");
         }
 
         // L�neas de prueba: simula que la tablet env�a datos
@@ -197,6 +218,7 @@ public class SceneManager : MonoBehaviour
 
     void AplicarTipoSala(string tipoSala, bool mantenerActiva)
     {
+        QuestCrashDiagnostics.Log("[SALA] AplicarTipoSala begin tipo=" + tipoSala + " mantenerActiva=" + mantenerActiva);
         tipoSalaActual = NormalizarTipoSala(tipoSala);
 
         GameObject salaAnterior = salaMultisensorial;
@@ -212,6 +234,7 @@ public class SceneManager : MonoBehaviour
             ReparentObjetosGeneradosASalaActiva();
 
         Debug.Log("[SALA] Tipo de sala aplicado: " + tipoSalaActual);
+        QuestCrashDiagnostics.Log("[SALA] AplicarTipoSala end tipo=" + tipoSalaActual + " activa=" + debeQuedarActiva);
     }
 
     string NormalizarTipoSala(string tipoSala)
@@ -246,8 +269,10 @@ public class SceneManager : MonoBehaviour
 
     void SetSalaActiva(bool activa)
     {
+        QuestCrashDiagnostics.Log("[SALA] SetSalaActiva begin activa=" + activa + " sala=" + (salaMultisensorial != null ? salaMultisensorial.name : "null"));
         if (salaMultisensorial != null)
             salaMultisensorial.SetActive(activa);
+        QuestCrashDiagnostics.Log("[SALA] SetSalaActiva end activeInHierarchy=" + (salaMultisensorial != null && salaMultisensorial.activeInHierarchy));
     }
 
     void ReparentObjetosGeneradosASalaActiva()
@@ -336,15 +361,86 @@ public class SceneManager : MonoBehaviour
 
     void OnEnable()
     {
+        QuestCrashDiagnostics.Log("[SceneManager] OnEnable");
+        Application.logMessageReceived += RegistrarDiagnosticoLogUnity;
         FanOption.OnInitialMenuSelectedWithLabel += AccionDelBotonConLabel;
         if (teleportManager != null)
             teleportManager.OnUsuarioTeletransportado += AvisarTabletUbicacion;
     }
     void OnDisable()
     {
+        QuestCrashDiagnostics.Log("[SceneManager] OnDisable");
+        Application.logMessageReceived -= RegistrarDiagnosticoLogUnity;
         FanOption.OnInitialMenuSelectedWithLabel -= AccionDelBotonConLabel;
         if (teleportManager != null)
             teleportManager.OnUsuarioTeletransportado -= AvisarTabletUbicacion;
+    }
+
+    void OnDestroy()
+    {
+        QuestCrashDiagnostics.Log("[SceneManager] OnDestroy " + CrearResumenEstadoVr());
+    }
+
+    void OnApplicationPause(bool pauseStatus)
+    {
+        QuestCrashDiagnostics.Log("[SceneManager] OnApplicationPause pause=" + pauseStatus + " " + CrearResumenEstadoVr());
+    }
+
+    void OnApplicationFocus(bool hasFocus)
+    {
+        QuestCrashDiagnostics.Log("[SceneManager] OnApplicationFocus focus=" + hasFocus + " " + CrearResumenEstadoVr());
+    }
+
+    void RegistrarDiagnosticoLogUnity(string condition, string stackTrace, LogType type)
+    {
+        if (registrandoDiagnosticoError || (type != LogType.Exception && type != LogType.Error))
+            return;
+
+        registrandoDiagnosticoError = true;
+        Debug.LogWarning("[DIAG] Error Unity detectado. " + CrearResumenEstadoVr());
+        registrandoDiagnosticoError = false;
+    }
+
+    string CrearResumenEstadoVr()
+    {
+        string resumen = $"fase={faseActual} transicion={transicionVRActiva} preparando={preparandoEntradaVR} sala={(salaMultisensorial != null ? salaMultisensorial.name : "null")} salaActiva={(salaMultisensorial != null && salaMultisensorial.activeInHierarchy)} objetos={objetosGeneradosPorId.Count}";
+
+        foreach (var kv in objetosGeneradosPorId)
+        {
+            if (kv.Value == null)
+            {
+                resumen += $" | {kv.Key}:null";
+                continue;
+            }
+
+            resumen += " | " + CrearResumenObjeto(kv.Value, kv.Key);
+        }
+
+        return resumen;
+    }
+
+    string CrearResumenObjeto(GameObject obj, string id)
+    {
+        if (obj == null)
+            return id + ":null";
+
+        Vector3 pos = obj.transform.position;
+        Vector3 rot = obj.transform.eulerAngles;
+        string resumen = $"{id}:pos=({pos.x:F2},{pos.y:F2},{pos.z:F2}) rotY={rot.y:F1} active={obj.activeInHierarchy}";
+
+        Bounds bounds;
+        if (TryGetRendererBounds(obj, out bounds))
+        {
+            Vector3 c = bounds.center;
+            Vector3 s = bounds.size;
+            resumen += $" boundsCenter=({c.x:F2},{c.y:F2},{c.z:F2}) boundsSize=({s.x:F2},{s.y:F2},{s.z:F2})";
+        }
+        else
+        {
+            resumen += " bounds=none";
+        }
+
+        return resumen;
     }
 
     void AvisarTabletUbicacion(int index)
@@ -841,45 +937,89 @@ public class SceneManager : MonoBehaviour
 
     IEnumerator RutinaTransicionVR()
     {
+        QuestCrashDiagnostics.Log("[VR] RutinaTransicionVR begin. " + CrearResumenEstadoVr());
         Debug.Log("[VR] Transicion: fade a negro.");
         if (teleportManager != null)
+        {
+            QuestCrashDiagnostics.Log("[VR] FadeToBlack begin.");
             yield return StartCoroutine(teleportManager.FadeToBlack(1.5f));
-
-        Debug.Log("[VR] Transicion: activando sala virtual.");
-        if (passthroughLayer != null)
-        {
-            Debug.Log("[VR] Paso: ocultando passthrough.");
-            passthroughLayer.hidden = true;
-            Debug.Log("[VR] Paso OK: passthrough oculto.");
+            QuestCrashDiagnostics.Log("[VR] FadeToBlack end.");
         }
 
-        PausarInteraccionesObjetosSala();
-
-        Debug.Log("[VR] Paso: SetSalaActiva(true) inicio.");
-        SetSalaActiva(true);
-        Debug.Log("[VR] Paso OK: SetSalaActiva(true) fin.");
-
-        if (menuActivator != null)
+        bool errorTransicion = false;
+        try
         {
-            menuActivator.isLockedOpen = false;
-            // AHORA DEPENDE DE LO QUE HAYA DICHO LA TABLET:
-            menuActivator.canOpenWithPalms = permisoMenuVRTerapeuta;
-            menuActivator.distancia = distanciaMenuUsuarios;
-            if (menuActivator.fanMenu != null) menuActivator.fanMenu.spacingAngle = separacionMenuUsuarios;
+            Debug.Log("[VR] Transicion: activando sala virtual.");
+            if (passthroughLayer != null)
+            {
+                QuestCrashDiagnostics.Log("[VR] passthrough hidden=true begin.");
+                Debug.Log("[VR] Paso: ocultando passthrough.");
+                passthroughLayer.hidden = true;
+                Debug.Log("[VR] Paso OK: passthrough oculto.");
+                QuestCrashDiagnostics.Log("[VR] passthrough hidden=true end.");
+            }
+
+            QuestCrashDiagnostics.Log("[VR] PausarInteraccionesObjetosSala begin.");
+            PausarInteraccionesObjetosSala();
+            QuestCrashDiagnostics.Log("[VR] PausarInteraccionesObjetosSala end.");
+
+            Debug.Log("[VR] Paso: SetSalaActiva(true) inicio.");
+            SetSalaActiva(true);
+            Debug.Log("[VR] Paso OK: SetSalaActiva(true) fin.");
+
+            if (menuActivator != null)
+            {
+                menuActivator.isLockedOpen = false;
+                // AHORA DEPENDE DE LO QUE HAYA DICHO LA TABLET:
+                menuActivator.canOpenWithPalms = permisoMenuVRTerapeuta;
+                menuActivator.distancia = distanciaMenuUsuarios;
+                if (menuActivator.fanMenu != null) menuActivator.fanMenu.spacingAngle = separacionMenuUsuarios;
+            }
         }
+        catch (Exception e)
+        {
+            errorTransicion = true;
+            transicionVRActiva = false;
+            ReanudarInteraccionesObjetosSala();
+            QuestCrashDiagnostics.LogError("[VR] Error durante activacion de sala: " + e);
+            Debug.LogError("[VR] Error durante activacion de sala: " + e);
+            Debug.LogWarning("[VR-DIAG] " + CrearResumenEstadoVr());
+        }
+
+        if (errorTransicion)
+            yield break;
 
         Debug.Log("[VR] Transicion: fade a claro.");
         if (teleportManager != null)
         {
             Debug.Log("[VR] Paso: FadeToClear inicio.");
+            QuestCrashDiagnostics.Log("[VR] FadeToClear begin.");
             yield return StartCoroutine(teleportManager.FadeToClear(1.5f));
             Debug.Log("[VR] Paso OK: FadeToClear fin.");
+            QuestCrashDiagnostics.Log("[VR] FadeToClear end.");
         }
 
-        ReanudarInteraccionesObjetosSala();
-        AplicarAjustesPostEntradaVr();
+        try
+        {
+            QuestCrashDiagnostics.Log("[VR] ReanudarInteraccionesObjetosSala begin.");
+            ReanudarInteraccionesObjetosSala();
+            QuestCrashDiagnostics.Log("[VR] ReanudarInteraccionesObjetosSala end.");
+            QuestCrashDiagnostics.Log("[VR] AplicarAjustesPostEntradaVr begin.");
+            AplicarAjustesPostEntradaVr();
+            QuestCrashDiagnostics.Log("[VR] AplicarAjustesPostEntradaVr end.");
+            Debug.Log("[VR-DIAG] Estado tras entrada VR: " + CrearResumenEstadoVr());
+            QuestCrashDiagnostics.Log("[VR-DIAG] Estado tras entrada VR: " + CrearResumenEstadoVr());
+        }
+        catch (Exception e)
+        {
+            QuestCrashDiagnostics.LogError("[VR] Error durante post-ajustes VR: " + e);
+            Debug.LogError("[VR] Error durante post-ajustes VR: " + e);
+            Debug.LogWarning("[VR-DIAG] " + CrearResumenEstadoVr());
+        }
+
         transicionVRActiva = false;
         Debug.Log("[VR] Transicion a VR completada.");
+        QuestCrashDiagnostics.Log("[VR] RutinaTransicionVR end.");
     }
 
     // ==========================================
@@ -1168,15 +1308,19 @@ public class SceneManager : MonoBehaviour
                 direccionPlana = cam.transform.forward;
             direccionPlana.Normalize();
 
-            float floorY = Mathf.Max(0f, cam.position.y - Mathf.Max(0.5f, tutorialAssumedPlayerHeight));
-            float targetCenterY = Mathf.Lerp(floorY, cam.position.y, Mathf.Clamp01(tutorialCenterHeightRatio));
-            Vector3 posicionAparicion = cam.position + (direccionPlana * Mathf.Max(0.1f, tutorialDistanceFromHead));
+            Vector3 posicionCabezaSegura = ObtenerPosicionCabezaSegura(cam);
+            float headY = posicionCabezaSegura.y;
+            float floorY = 0f;
+            float targetCenterY = Mathf.Lerp(floorY, headY, Mathf.Clamp01(tutorialCenterHeightRatio));
+            float distanciaInicial = Mathf.Max(0.1f, tutorialDistanceFromHead, tutorialMinDistance);
+            Vector3 posicionAparicion = posicionCabezaSegura + (direccionPlana * distanciaInicial);
             posicionAparicion.y = targetCenterY;
 
-            elementoTutorialActivo = Instantiate(elemento.prefabHabitacion, posicionAparicion, Quaternion.LookRotation(direccionPlana));
-            AlinearCentroVisualTutorial(elementoTutorialActivo, targetCenterY);
+            elementoTutorialActivo = Instantiate(elemento.prefabHabitacion, posicionAparicion, Quaternion.LookRotation(-direccionPlana, Vector3.up));
+            PrepararPreviewTutorial(elementoTutorialActivo);
+            AplicarColocacionTutorial(elementoTutorialActivo, posicionCabezaSegura, direccionPlana, floorY, targetCenterY, idTablet);
 
-            Debug.Log($"Mostrando {idTablet} en modo Tutorial. centerY={targetCenterY:F2}");
+            Debug.Log($"[TUTORIAL] Mostrando {idTablet}. {CrearResumenObjeto(elementoTutorialActivo, idTablet)}");
 
             if (connectionServer != null && connectionServer.connected)
             {
@@ -1207,6 +1351,79 @@ public class SceneManager : MonoBehaviour
         objeto.transform.position = pos;
     }
 
+    Vector3 ObtenerPosicionCabezaSegura(Transform cam)
+    {
+        Vector3 posicion = cam != null ? cam.position : Vector3.zero;
+        float minHead = Mathf.Max(0.1f, tutorialMinHeadHeight);
+        float maxHead = Mathf.Max(minHead, tutorialMaxHeadHeight);
+
+        if (float.IsNaN(posicion.y) || float.IsInfinity(posicion.y) || posicion.y < minHead || posicion.y > maxHead)
+        {
+            Debug.LogWarning($"[TUTORIAL] Altura de camara no valida ({posicion.y:F2}); usando altura asumida {tutorialAssumedPlayerHeight:F2}.");
+            posicion.y = Mathf.Clamp(tutorialAssumedPlayerHeight, minHead, maxHead);
+        }
+
+        return posicion;
+    }
+
+    void PrepararPreviewTutorial(GameObject objeto)
+    {
+        if (objeto == null)
+            return;
+
+        MonoBehaviour[] behaviours = objeto.GetComponentsInChildren<MonoBehaviour>(true);
+        foreach (MonoBehaviour behaviour in behaviours)
+        {
+            if (behaviour != null)
+                behaviour.enabled = false;
+        }
+
+        AudioSource[] audioSources = objeto.GetComponentsInChildren<AudioSource>(true);
+        foreach (AudioSource audioSource in audioSources)
+        {
+            if (audioSource == null)
+                continue;
+
+            audioSource.Stop();
+            audioSource.enabled = false;
+        }
+
+        Collider[] colliders = objeto.GetComponentsInChildren<Collider>(true);
+        foreach (Collider collider in colliders)
+        {
+            if (collider != null)
+                collider.enabled = false;
+        }
+    }
+
+    void AplicarColocacionTutorial(GameObject objeto, Vector3 posicionCabeza, Vector3 direccionPlana, float floorY, float targetCenterY, string idTablet)
+    {
+        if (objeto == null)
+            return;
+
+        Bounds bounds;
+        float distancia = Mathf.Max(0.1f, tutorialDistanceFromHead, tutorialMinDistance);
+        if (TryGetRendererBounds(objeto, out bounds))
+        {
+            float radioHorizontal = Mathf.Max(bounds.extents.x, bounds.extents.z);
+            distancia = Mathf.Clamp(radioHorizontal + Mathf.Max(0f, tutorialBoundsPadding), tutorialMinDistance, tutorialMaxDistance);
+        }
+
+        Vector3 centroObjetivo = posicionCabeza + direccionPlana * distancia;
+        centroObjetivo.y = targetCenterY;
+        objeto.transform.rotation = Quaternion.LookRotation(-direccionPlana, Vector3.up);
+
+        if (TryGetRendererBounds(objeto, out bounds))
+            objeto.transform.position += centroObjetivo - bounds.center;
+        else
+            objeto.transform.position = centroObjetivo;
+
+        if (TryGetRendererBounds(objeto, out bounds) && bounds.min.y < floorY)
+            objeto.transform.position += Vector3.up * (floorY - bounds.min.y);
+
+        Debug.Log($"[TUTORIAL] {idTablet}: distancia={distancia:F2} floorY={floorY:F2} targetCenterY={targetCenterY:F2}");
+    }
+
     bool TryGetRendererBounds(GameObject root, out Bounds bounds)
     {
         bool hasBounds = false;
@@ -1234,6 +1451,59 @@ public class SceneManager : MonoBehaviour
         return hasBounds;
     }
 
+    bool TryGetRendererBoundsExcluyendoObjetosGenerados(GameObject root, out Bounds bounds)
+    {
+        bool hasBounds = false;
+        bounds = new Bounds(root != null ? root.transform.position : Vector3.zero, Vector3.zero);
+        if (root == null)
+            return false;
+
+        Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+        foreach (Renderer renderer in renderers)
+        {
+            if (renderer == null || renderer is ParticleSystemRenderer || renderer is LineRenderer || renderer is TrailRenderer)
+                continue;
+
+            if (EsParteDeObjetoGenerado(renderer.transform))
+                continue;
+
+            if (!hasBounds)
+            {
+                bounds = renderer.bounds;
+                hasBounds = true;
+            }
+            else
+            {
+                bounds.Encapsulate(renderer.bounds);
+            }
+        }
+
+        return hasBounds;
+    }
+
+    bool EsParteDeObjetoGenerado(Transform transformObjetivo)
+    {
+        if (transformObjetivo == null)
+            return false;
+
+        foreach (GameObject obj in objetosGeneradosEnSala)
+        {
+            if (obj == null)
+                continue;
+
+            Transform actual = transformObjetivo;
+            while (actual != null)
+            {
+                if (actual == obj.transform)
+                    return true;
+
+                actual = actual.parent;
+            }
+        }
+
+        return false;
+    }
+
     void DestruirElementoTutorialActivo()
     {
         if (elementoTutorialActivo == null)
@@ -1249,22 +1519,32 @@ public class SceneManager : MonoBehaviour
     // ==========================================
     IEnumerator PrepararEntradaVRSegura(List<string> elementosSeleccionadosTablet)
     {
+        QuestCrashDiagnostics.Log("[VR] PrepararEntradaVRSegura begin count=" + (elementosSeleccionadosTablet != null ? elementosSeleccionadosTablet.Count : 0)
+            + " preparando=" + preparandoEntradaVR + " transicion=" + transicionVRActiva);
+
         if (preparandoEntradaVR || transicionVRActiva)
         {
             Debug.Log("[VR] Ignorada preparacion: ya hay una entrada VR en curso.");
+            QuestCrashDiagnostics.LogWarning("[VR] PrepararEntradaVRSegura ignored: already busy.");
             yield break;
         }
 
         preparandoEntradaVR = true;
 
+        QuestCrashDiagnostics.Log("[VR] PrepararEntradaVRSegura destroying tutorial begin.");
         DestruirElementoTutorialActivo();
+        QuestCrashDiagnostics.Log("[VR] PrepararEntradaVRSegura destroying tutorial end.");
         yield return null;
 
+        QuestCrashDiagnostics.Log("[VR] PrepararEntradaVRSegura RecibirDatosDeLaTablet begin.");
         RecibirDatosDeLaTablet(elementosSeleccionadosTablet);
+        QuestCrashDiagnostics.Log("[VR] PrepararEntradaVRSegura RecibirDatosDeLaTablet end.");
         yield return null;
 
         preparandoEntradaVR = false;
+        QuestCrashDiagnostics.Log("[VR] PrepararEntradaVRSegura IniciarExperienciaVR begin.");
         IniciarExperienciaVR();
+        QuestCrashDiagnostics.Log("[VR] PrepararEntradaVRSegura end.");
     }
 
     public void RecibirDatosDeLaTablet(List<string> elementosSeleccionadosTablet)
@@ -1277,6 +1557,7 @@ public class SceneManager : MonoBehaviour
     {
         try
         {
+            QuestCrashDiagnostics.Log("[VR] RecibirDatosDeLaTabletConPosicionesFijas begin.");
             if (elementosSeleccionadosTablet == null)
                 elementosSeleccionadosTablet = new List<string>();
 
@@ -1288,10 +1569,14 @@ public class SceneManager : MonoBehaviour
             EliminarObjetosNoSeleccionados(idsSeleccionados);
             CrearObjetosNuevosEnPuntosFijos(idsSeleccionados);
             ReconstruirEstadoVr(idsSeleccionados);
+            Debug.Log("[VR-DIAG] Estado tras preparar elementos: " + CrearResumenEstadoVr());
+            QuestCrashDiagnostics.Log("[VR-DIAG] Estado tras preparar elementos: " + CrearResumenEstadoVr());
         }
         catch (Exception e)
         {
+            QuestCrashDiagnostics.LogError("[VR] Error reconstruyendo estado VR: " + e);
             Debug.LogError("[VR] Error reconstruyendo estado VR: " + e);
+            Debug.LogWarning("[VR-DIAG] Estado tras error reconstruyendo VR: " + CrearResumenEstadoVr());
         }
     }
 
@@ -1301,10 +1586,14 @@ public class SceneManager : MonoBehaviour
 
         foreach (string id in elementosSeleccionadosTablet)
         {
-            if (string.IsNullOrWhiteSpace(id) || ids.Contains(id))
+            if (string.IsNullOrWhiteSpace(id))
                 continue;
 
-            ids.Add(id.Trim());
+            string idNormalizado = id.Trim();
+            if (ids.Contains(idNormalizado))
+                continue;
+
+            ids.Add(idNormalizado);
 
             if (ids.Count >= 6)
                 break;
@@ -1364,6 +1653,8 @@ public class SceneManager : MonoBehaviour
         if (instancia == null)
             return;
 
+        QuestCrashDiagnostics.Log("[VR] DestruirInstanciaPrefabSegura begin name=" + instancia.name);
+
         AudioSource[] audioSources = instancia.GetComponentsInChildren<AudioSource>(true);
         foreach (AudioSource audioSource in audioSources)
         {
@@ -1387,6 +1678,7 @@ public class SceneManager : MonoBehaviour
 
         instancia.SetActive(false);
         Destroy(instancia);
+        QuestCrashDiagnostics.Log("[VR] DestruirInstanciaPrefabSegura end name=" + instancia.name);
     }
 
     void PausarInteraccionesObjetosSala()
@@ -1439,6 +1731,18 @@ public class SceneManager : MonoBehaviour
 
     void CrearObjetosNuevosEnPuntosFijos(List<string> idsSeleccionados)
     {
+        if (baseDatosElementos == null || baseDatosElementos.Count == 0)
+        {
+            Debug.LogWarning("[VR] No hay baseDatosElementos configurada.");
+            return;
+        }
+
+        if (puntosDeAparicion == null || puntosDeAparicion.Count == 0)
+        {
+            Debug.LogWarning("[VR] No hay puntosDeAparicion configurados.");
+            return;
+        }
+
         foreach (string idTablet in idsSeleccionados)
         {
             try
@@ -1449,7 +1753,7 @@ public class SceneManager : MonoBehaviour
                 ElementoVR elemento = baseDatosElementos.Find(e => e.idElemento == idTablet);
                 if (elemento.prefabHabitacion == null)
                 {
-                    Debug.LogWarning("[VR] Elemento sin prefabHabitacion: " + idTablet);
+                    Debug.LogWarning("[VR] Elemento no encontrado o sin prefabHabitacion: " + idTablet);
                     continue;
                 }
 
@@ -1461,16 +1765,25 @@ public class SceneManager : MonoBehaviour
 
                 Transform parentTransform = salaMultisensorial != null ? salaMultisensorial.transform : null;
                 Debug.Log("[VR] Instanciando elemento '" + idTablet + "' con prefab '" + elemento.prefabHabitacion.name + "' en punto " + puntoElegido.puntoAparicion.position);
+                QuestCrashDiagnostics.Log("[VR] Instantiate begin id=" + idTablet + " prefab=" + elemento.prefabHabitacion.name
+                    + " parent=" + (parentTransform != null ? parentTransform.name : "null"));
                 GameObject nuevoObjetoSala = Instantiate(elemento.prefabHabitacion, puntoElegido.puntoAparicion.position, puntoElegido.puntoAparicion.rotation, parentTransform);
+                QuestCrashDiagnostics.Log("[VR] Instantiate end id=" + idTablet + " instance=" + nuevoObjetoSala.name);
 
                 objetosGeneradosEnSala.Add(nuevoObjetoSala);
                 objetosGeneradosPorId[idTablet] = nuevoObjetoSala;
                 puntosAsignadosPorId[idTablet] = puntoElegido;
                 mapaDeTeleports[idTablet] = puntoElegido.puntoTeletransporte;
+
+                AplicarColocacionFijaEnPunto(nuevoObjetoSala, puntoElegido, idTablet);
+                Debug.Log("[VR-DIAG] Elemento colocado: " + CrearResumenObjeto(nuevoObjetoSala, idTablet));
+                QuestCrashDiagnostics.Log("[VR-DIAG] Elemento colocado: " + CrearResumenObjeto(nuevoObjetoSala, idTablet));
             }
             catch (Exception e)
             {
+                QuestCrashDiagnostics.LogError("[VR] Error instanciando elemento '" + idTablet + "': " + e);
                 Debug.LogError("[VR] Error instanciando elemento '" + idTablet + "': " + e);
+                Debug.LogWarning("[VR-DIAG] Estado tras error instanciando '" + idTablet + "': " + CrearResumenEstadoVr());
             }
         }
     }
@@ -1501,8 +1814,176 @@ public class SceneManager : MonoBehaviour
         Debug.Log($"[VR] {idTablet}: base visual alineada al suelo. minY={bounds.min.y:F3} sueloY={sueloY:F3} ajusteY={ajusteY:F3}");
     }
 
+    void OrientarObjetoLejosDeParedMasCercana(GameObject objetoSala, Bounds boundsSala, string idTablet)
+    {
+        if (objetoSala == null)
+            return;
+
+        Bounds boundsObjeto;
+        if (!TryGetRendererBounds(objetoSala, out boundsObjeto))
+            return;
+
+        Vector3 centro = boundsObjeto.center;
+        float distanciaMinX = Mathf.Abs(centro.x - boundsSala.min.x);
+        float distanciaMaxX = Mathf.Abs(boundsSala.max.x - centro.x);
+        float distanciaMinZ = Mathf.Abs(centro.z - boundsSala.min.z);
+        float distanciaMaxZ = Mathf.Abs(boundsSala.max.z - centro.z);
+
+        Vector3 direccionInterior = Vector3.right;
+        float distanciaMasCercana = distanciaMinX;
+
+        if (distanciaMaxX < distanciaMasCercana)
+        {
+            distanciaMasCercana = distanciaMaxX;
+            direccionInterior = Vector3.left;
+        }
+
+        if (distanciaMinZ < distanciaMasCercana)
+        {
+            distanciaMasCercana = distanciaMinZ;
+            direccionInterior = Vector3.forward;
+        }
+
+        if (distanciaMaxZ < distanciaMasCercana)
+            direccionInterior = Vector3.back;
+
+        if (direccionInterior.sqrMagnitude < 0.001f)
+            return;
+
+        objetoSala.transform.rotation = Quaternion.LookRotation(direccionInterior, Vector3.up);
+        Debug.Log($"[VR] {idTablet}: orientado lejos de la pared mas cercana. forward={direccionInterior}");
+    }
+
+    void AjustarBoundsObjetoDentroSala(GameObject objetoSala, Bounds boundsSala, float sueloY, string idTablet)
+    {
+        if (objetoSala == null)
+            return;
+
+        Bounds boundsObjeto;
+        if (!TryGetRendererBounds(objetoSala, out boundsObjeto))
+            return;
+
+        float margen = Mathf.Max(0f, margenObjetoDentroSala);
+        float minX = boundsSala.min.x + margen;
+        float maxX = boundsSala.max.x - margen;
+        float minZ = boundsSala.min.z + margen;
+        float maxZ = boundsSala.max.z - margen;
+
+        if (minX >= maxX || minZ >= maxZ)
+        {
+            Debug.LogWarning($"[VR] {idTablet}: no se pudo ajustar dentro de sala por bounds de sala invalidos.");
+            return;
+        }
+
+        Vector3 ajuste = Vector3.zero;
+        float anchoObjeto = boundsObjeto.size.x;
+        float profundidadObjeto = boundsObjeto.size.z;
+
+        if (anchoObjeto <= maxX - minX)
+        {
+            if (boundsObjeto.min.x < minX)
+                ajuste.x += minX - boundsObjeto.min.x;
+            if (boundsObjeto.max.x + ajuste.x > maxX)
+                ajuste.x += maxX - (boundsObjeto.max.x + ajuste.x);
+        }
+        else
+        {
+            ajuste.x += boundsSala.center.x - boundsObjeto.center.x;
+            Debug.LogWarning($"[VR] {idTablet}: ancho mayor que margen interior de sala; centrando en X.");
+        }
+
+        if (profundidadObjeto <= maxZ - minZ)
+        {
+            if (boundsObjeto.min.z < minZ)
+                ajuste.z += minZ - boundsObjeto.min.z;
+            if (boundsObjeto.max.z + ajuste.z > maxZ)
+                ajuste.z += maxZ - (boundsObjeto.max.z + ajuste.z);
+        }
+        else
+        {
+            ajuste.z += boundsSala.center.z - boundsObjeto.center.z;
+            Debug.LogWarning($"[VR] {idTablet}: profundidad mayor que margen interior de sala; centrando en Z.");
+        }
+
+        float maxAjuste = Mathf.Max(0.1f, maxAjusteCentradoObjeto);
+        if (Mathf.Abs(ajuste.x) > maxAjuste || Mathf.Abs(ajuste.z) > maxAjuste)
+        {
+            Debug.LogWarning($"[VR] {idTablet}: ajuste XZ omitido por ser demasiado grande ({ajuste.x:F3}, {ajuste.z:F3}).");
+            return;
+        }
+
+        if (Mathf.Abs(ajuste.x) > 0.001f || Mathf.Abs(ajuste.z) > 0.001f)
+        {
+            objetoSala.transform.position += ajuste;
+            Debug.Log($"[VR] {idTablet}: bounds ajustados dentro de sala. ajusteXZ=({ajuste.x:F3}, {ajuste.z:F3})");
+        }
+
+        AlinearMinimoVisualConSuelo(objetoSala, sueloY, idTablet);
+    }
+
+    void AplicarColocacionFijaEnPunto(GameObject objetoSala, PuntoSala punto, string idTablet)
+    {
+        if (objetoSala == null || punto.puntoAparicion == null)
+            return;
+
+        Bounds boundsSala = default;
+        bool hayBoundsSala = salaMultisensorial != null && TryGetRendererBoundsExcluyendoObjetosGenerados(salaMultisensorial, out boundsSala);
+        float sueloY = punto.puntoAparicion.position.y;
+
+        objetoSala.transform.rotation = punto.puntoAparicion.rotation;
+
+        if (centrarBoundsVisualesEnPuntoAparicion)
+            CentrarBoundsVisualesEnPunto(objetoSala, punto.puntoAparicion.position, idTablet);
+
+        AlinearMinimoVisualConSuelo(objetoSala, sueloY, idTablet);
+
+        if (hayBoundsSala)
+        {
+            OrientarObjetoLejosDeParedMasCercana(objetoSala, boundsSala, idTablet);
+
+            if (centrarBoundsVisualesEnPuntoAparicion)
+                CentrarBoundsVisualesEnPunto(objetoSala, punto.puntoAparicion.position, idTablet);
+
+            AjustarBoundsObjetoDentroSala(objetoSala, boundsSala, sueloY, idTablet);
+        }
+
+        AjustarJumpingPointCercaDelElemento(objetoSala, punto.puntoTeletransporte, idTablet, hayBoundsSala, boundsSala);
+    }
+
+    void CentrarBoundsVisualesEnPunto(GameObject objetoSala, Vector3 puntoObjetivo, string idTablet)
+    {
+        if (objetoSala == null)
+            return;
+
+        Bounds bounds;
+        if (!TryGetRendererBounds(objetoSala, out bounds))
+            return;
+
+        Vector3 ajuste = puntoObjetivo - bounds.center;
+        ajuste.y = 0f;
+
+        float maxAjuste = Mathf.Max(0.1f, maxAjusteCentradoObjeto);
+        if (Mathf.Abs(ajuste.x) > maxAjuste || Mathf.Abs(ajuste.z) > maxAjuste)
+        {
+            Debug.LogWarning($"[VR] {idTablet}: centrado visual omitido por ajuste XZ demasiado grande ({ajuste.x:F3}, {ajuste.z:F3}).");
+            return;
+        }
+
+        if (Mathf.Abs(ajuste.x) < 0.001f && Mathf.Abs(ajuste.z) < 0.001f)
+            return;
+
+        objetoSala.transform.position += ajuste;
+        Debug.Log($"[VR] {idTablet}: bounds visuales centrados en punto fijo. ajusteXZ=({ajuste.x:F3}, {ajuste.z:F3})");
+    }
+
     bool TryGetSiguientePuntoLibre(out PuntoSala puntoLibre)
     {
+        if (puntosDeAparicion == null)
+        {
+            puntoLibre = default;
+            return false;
+        }
+
         int limite = Mathf.Min(6, puntosDeAparicion.Count);
 
         for (int i = 0; i < limite; i++)
@@ -1532,9 +2013,15 @@ public class SceneManager : MonoBehaviour
 
     bool TryGetPuntoLibreInteriorParaObjetoGrande(out PuntoSala puntoLibre)
     {
+        if (puntosDeAparicion == null)
+        {
+            puntoLibre = default;
+            return false;
+        }
+
         int limite = Mathf.Min(6, puntosDeAparicion.Count);
         Bounds boundsSala = default;
-        bool hayBoundsSala = salaMultisensorial != null && TryGetRendererBounds(salaMultisensorial, out boundsSala);
+        bool hayBoundsSala = salaMultisensorial != null && TryGetRendererBoundsExcluyendoObjetosGenerados(salaMultisensorial, out boundsSala);
         Vector3 centroSala = hayBoundsSala ? boundsSala.center : (salaMultisensorial != null ? salaMultisensorial.transform.position : Vector3.zero);
         float margenInterior = 0.75f;
 
@@ -1639,8 +2126,16 @@ public class SceneManager : MonoBehaviour
 
             if (puntosAsignadosPorId.TryGetValue(idTablet, out PuntoSala punto))
             {
-                destinosTeleportActivos.Add(punto.puntoTeletransporte);
-                mapaDeTeleports[idTablet] = punto.puntoTeletransporte;
+                if (punto.puntoTeletransporte != null)
+                {
+                    destinosTeleportActivos.Add(punto.puntoTeletransporte);
+                    mapaDeTeleports[idTablet] = punto.puntoTeletransporte;
+                }
+                else
+                {
+                    Debug.LogWarning("[VR] Punto de teletransporte no asignado para: " + idTablet);
+                }
+
                 idsOrdenadosParaTeleport.Add(idTablet);
             }
 
@@ -1674,10 +2169,7 @@ public class SceneManager : MonoBehaviour
             if (!puntosAsignadosPorId.TryGetValue(idTablet, out PuntoSala punto))
                 continue;
 
-            if (punto.puntoAparicion != null)
-                AlinearMinimoVisualConSuelo(objetoSala, punto.puntoAparicion.position.y, idTablet);
-
-            AjustarJumpingPointCercaDelElemento(objetoSala, punto.puntoTeletransporte, idTablet);
+            AplicarColocacionFijaEnPunto(objetoSala, punto, idTablet);
 
             if (punto.puntoTeletransporte != null)
             {
@@ -1690,7 +2182,7 @@ public class SceneManager : MonoBehaviour
             teleportManager.teleportDestinations = destinosTeleportActivos.ToArray();
     }
 
-    void AjustarJumpingPointCercaDelElemento(GameObject objetoSala, Transform jumpingPoint, string idTablet)
+    void AjustarJumpingPointCercaDelElemento(GameObject objetoSala, Transform jumpingPoint, string idTablet, bool hayBoundsSala, Bounds boundsSala)
     {
         if (!ajustarJumpingPointsCercaDelElemento || objetoSala == null || jumpingPoint == null)
             return;
@@ -1722,6 +2214,9 @@ public class SceneManager : MonoBehaviour
 
         Vector3 posicion = centro + direccion * distancia;
         posicion.y = jumpingPoint.position.y;
+        if (hayBoundsSala)
+            posicion = AjustarPuntoDentroSalaXZ(posicion, boundsSala, margenTeleportDentroSala);
+
         jumpingPoint.position = posicion;
 
         Vector3 mirada = centro - jumpingPoint.position;
@@ -1730,6 +2225,23 @@ public class SceneManager : MonoBehaviour
             jumpingPoint.rotation = Quaternion.LookRotation(mirada.normalized, Vector3.up);
 
         Debug.Log($"[VR] {idTablet}: jumping point ajustado cerca del elemento. pos={jumpingPoint.position} distancia={distancia:F2}");
+    }
+
+    Vector3 AjustarPuntoDentroSalaXZ(Vector3 posicion, Bounds boundsSala, float margen)
+    {
+        float margenSeguro = Mathf.Max(0f, margen);
+        float minX = boundsSala.min.x + margenSeguro;
+        float maxX = boundsSala.max.x - margenSeguro;
+        float minZ = boundsSala.min.z + margenSeguro;
+        float maxZ = boundsSala.max.z - margenSeguro;
+
+        if (minX < maxX)
+            posicion.x = Mathf.Clamp(posicion.x, minX, maxX);
+
+        if (minZ < maxZ)
+            posicion.z = Mathf.Clamp(posicion.z, minZ, maxZ);
+
+        return posicion;
     }
 
     string CrearEntradaSync(string idTablet, Transform transformReal)

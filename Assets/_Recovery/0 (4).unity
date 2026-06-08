@@ -5965,8 +5965,14 @@ MonoBehaviour:
   margenObjetoDentroSala: 0.15
   margenTeleportDentroSala: 0.25
   centrarBoundsVisualesEnPuntoAparicion: 1
+  maxAjusteCentradoObjeto: 5
   tutorialDistanceFromHead: 0.25
+  tutorialMinDistance: 0.7
+  tutorialMaxDistance: 2.4
+  tutorialBoundsPadding: 0.35
   tutorialAssumedPlayerHeight: 1.6
+  tutorialMinHeadHeight: 0.8
+  tutorialMaxHeadHeight: 2.2
   tutorialCenterHeightRatio: 0.5
 --- !u!4 &774784141 stripped
 Transform:

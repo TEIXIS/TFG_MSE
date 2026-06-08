@@ -69,9 +69,27 @@ public class GestorColorLampara : MonoBehaviour
 
     private MaterialPropertyBlock bloquePropiedadesLampara;
     private MaterialPropertyBlock bloquePropiedadesBotones;
+    private bool esInstanciaMenuMano;
 
     void Start()
     {
+        QuestCrashDiagnostics.Log("[GestorColorLampara] Start " + name);
+        esInstanciaMenuMano = EstaEnMenuMano();
+        QuestCrashDiagnostics.Log("[GestorColorLampara] Contexto menuMano=" + esInstanciaMenuMano
+            + " listaBotones=" + (listaBotones != null ? listaBotones.Count : -1)
+            + " botonMaestro=" + (botonMaestro != null)
+            + " tubo=" + (tuboInterior != null)
+            + " quad=" + (quadInterior != null)
+            + " tapa=" + (tapaSuperficie != null)
+            + " luz=" + (luzBase != null));
+
+        if (esInstanciaMenuMano)
+        {
+            QuestCrashDiagnostics.Log("[GestorColorLampara] Start omitido en clon de menu de mano.");
+            return;
+        }
+
+        QuestCrashDiagnostics.Log("[GestorColorLampara] Creando MaterialPropertyBlock.");
         bloquePropiedadesBotones = new MaterialPropertyBlock();
         bloquePropiedadesLampara = new MaterialPropertyBlock();
 
@@ -108,6 +126,26 @@ public class GestorColorLampara : MonoBehaviour
         ActualizarVisualBotonesPaleta(); // Ilumina el bot�n activo inicial autom�ticamente
     }
 
+    private void OnEnable()
+    {
+        QuestCrashDiagnostics.Log("[GestorColorLampara] OnEnable " + name + " menuMano=" + EstaEnMenuMano());
+    }
+
+    private void OnDisable()
+    {
+        QuestCrashDiagnostics.Log("[GestorColorLampara] OnDisable " + name + " menuMano=" + esInstanciaMenuMano);
+    }
+
+    private void OnDestroy()
+    {
+        QuestCrashDiagnostics.Log("[GestorColorLampara] OnDestroy " + name + " menuMano=" + esInstanciaMenuMano);
+    }
+
+    private bool EstaEnMenuMano()
+    {
+        return GetComponentInParent<FanOption>(true) != null;
+    }
+
     private void AplicarColorInicialSinCambiarActivos()
     {
         Color colorBaseRender = estaEncendida ? ObtenerColorActual() : Color.black;
@@ -127,9 +165,13 @@ public class GestorColorLampara : MonoBehaviour
 
     public void AlternarEstadoLampara()
     {
+        if (esInstanciaMenuMano)
+            return;
+
+        QuestCrashDiagnostics.Log("[GestorColorLampara] AlternarEstadoLampara begin encendida=" + estaEncendida);
         estaEncendida = !estaEncendida;
 
-        if (botonMaestro.rendererBoton != null)
+        if (botonMaestro != null && botonMaestro.rendererBoton != null)
         {
             AudioSource sourceMaestro = botonMaestro.rendererBoton.GetComponent<AudioSource>();
             if (sourceMaestro != null && sonidoClick != null) sourceMaestro.PlayOneShot(sonidoClick);
@@ -148,12 +190,16 @@ public class GestorColorLampara : MonoBehaviour
 
         ActualizarIluminacion();
         ActualizarVisualBotonMaestro();
+        QuestCrashDiagnostics.Log("[GestorColorLampara] AlternarEstadoLampara end encendida=" + estaEncendida);
     }
 
     public void SeleccionarBoton(string nombreColor)
     {
+        if (esInstanciaMenuMano)
+            return;
+
         if (!estaEncendida) return;
-        listaBotones.Find(b => b.nombreIdentificador.ToLower().Trim() == nombreColor.ToLower().Trim())?.rendererBoton?.GetComponent<AudioSource>()?.PlayOneShot(sonidoClick);
+        listaBotones?.Find(b => b != null && b.nombreIdentificador.ToLower().Trim() == nombreColor.ToLower().Trim())?.rendererBoton?.GetComponent<AudioSource>()?.PlayOneShot(sonidoClick);
         CambiarColorPorNombre(nombreColor);
         ActualizarVisualBotonesPaleta(); // Actualiza bas�ndose en el enum reci�n guardado
     }
@@ -236,6 +282,7 @@ public class GestorColorLampara : MonoBehaviour
 
     private void ActualizarIluminacion()
     {
+        QuestCrashDiagnostics.Log("[GestorColorLampara] ActualizarIluminacion begin encendida=" + estaEncendida + " color=" + colorActivo);
         Color colorBaseRender = estaEncendida ? ObtenerColorActual() : Color.black;
         Color colorEmissionRender = estaEncendida ? ObtenerColorActual() : Color.black;
 
@@ -257,6 +304,7 @@ public class GestorColorLampara : MonoBehaviour
             ActualizarMaterialLampara(quadInterior?.GetComponent<Renderer>(), colorBaseRender, colorEmissionRender);
             ActualizarMaterialLampara(tapaSuperficie?.GetComponent<Renderer>(), colorBaseRender, colorEmissionRender);
         }
+        QuestCrashDiagnostics.Log("[GestorColorLampara] ActualizarIluminacion end encendida=" + estaEncendida);
     }
 
     private void SetActiveIfNeeded(GameObject target, bool active)
@@ -264,6 +312,7 @@ public class GestorColorLampara : MonoBehaviour
       if (target == null || target.activeSelf == active)
           return;
 
+      QuestCrashDiagnostics.Log("[GestorColorLampara] SetActive " + target.name + " -> " + active);
       target.SetActive(active);
   }
 
